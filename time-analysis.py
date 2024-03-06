@@ -174,7 +174,7 @@ for period in periods:
     counts[period]={}
     for run in run_list:
         if run in hists[period].keys():
-            counts[period][run]=utils.integrate_hist(hists[period][run],low,high)
+            counts[period][run]=integrate_hist(hists[period][run],low,high)
 print(json.dumps(counts,indent=1))
 print(bins)
 histo_time =( Hist.new.Variable(bins).Double())
