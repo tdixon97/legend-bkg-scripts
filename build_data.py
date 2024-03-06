@@ -207,14 +207,17 @@ def cross_talk_corrected_energies(energies:np.ndarray,channels:np.ndarray,cross_
 
 
 
-def get_data_awkard(evt_path:str,Nmax:int=None):
+def get_data_awkard(cfg:dict,periods=None,Nmax:int=None,run_list:dict={}):
     """
     A function to load the evt tier data into an awkard array also getting the energies
     Parameters
     ----------------------
-        - evt_path (str): path to the data
+        - cfg: path to the data for each period
+        - periods: list of periods to use
         - Nmax (int): used for debugging, if not None (the default) only Nmax files will be read
+        - run_list (dict): dictonary of run_lists
     Returns
+
     ----------------------
         - an awkard array of the data
     
@@ -228,122 +231,125 @@ def get_data_awkard(evt_path:str,Nmax:int=None):
     ## loop over period and run (so we can save this)
     N=0
     for period,run_list in tqdm(runs.items()): 
-        for run in tqdm(run_list):
-            tier = 'evt' if 'tmp-auto' in evt_path else 'pet'
-            if tier == 'evt':
-                fl_evt = glob.glob(evt_path+"/{}/{}/*-tier_evt.lh5".format(period,run))
-            else:
-                fl_evt = glob.glob(evt_path+"/{}/{}/*-tier_pet.lh5".format(period,run))
-      
-            for f_evt in fl_evt:
-                
-                f_tcm = f_evt.replace(tier, "tcm")
-                f_hit = f_evt.replace(tier, "hit" if 'tmp-auto' in evt_path else 'pet')
+        
+        if (period is not None and period in periods):
+            for run in tqdm(run_list):
 
-                d_evt = lh5.read_as("evt", f_evt, library="ak")
-            
-             
-                # some black magic to get TCM data corresponding to geds.hit_idx
-                tcm = ak.Array(
-                    {
-                        k: ak.unflatten(
-                            lh5.read_as(f"hardware_tcm_1/array_{k}", f_tcm, library="ak")[
-                                ak.flatten(d_evt.geds.hit_idx)
-                            ],
-                            ak.num(d_evt.geds.hit_idx),
+                tier =cfg[period]["tier"]
+                evt_path  =cfg[period]["evt_path"]
+                tier = 'evt' if 'tmp-auto' in evt_path else 'pet'
+                if tier == 'evt':
+                    fl_evt = glob.glob(evt_path+"/{}/{}/*-tier_evt.lh5".format(period,run))
+                else:
+                    fl_evt = glob.glob(evt_path+"/{}/{}/*-tier_pet.lh5".format(period,run))
+        
+                for f_evt in fl_evt:
+                    
+                    f_tcm = f_evt.replace(tier, "tcm")
+                    f_hit = f_evt.replace(tier, "hit" if 'tmp-auto' in evt_path else 'pet')
+
+                    d_evt = lh5.read_as("evt", f_evt, library="ak")
+                
+                
+                    # some black magic to get TCM data corresponding to geds.hit_idx
+                    tcm = ak.Array(
+                        {
+                            k: ak.unflatten(
+                                lh5.read_as(f"hardware_tcm_1/array_{k}", f_tcm, library="ak")[
+                                    ak.flatten(d_evt.geds.hit_idx)
+                                ],
+                                ak.num(d_evt.geds.hit_idx),
+                            )
+                            for k in ["id", "idx"]
+                        }
+                    )
+        
+                    # get uniques rawids for loading hit data
+                    rawids = np.unique(ak.to_numpy(ak.ravel(tcm.id)))
+                    energy = None
+
+                    # for each table in the hit file
+                    for rawid in rawids:
+
+                        # get the hit table indices we need to load
+                        idx_mask = tcm.idx[tcm.id == rawid]
+                        idx_loc = ak.count(idx_mask, axis=-1)
+
+                        # read in energy data with mask above
+                        energy_data = lh5.read_as(
+                            f"ch{rawid}/hit/cuspEmax_ctc_cal",
+                            f_hit,
+                            library="ak",
+                            idx=ak.to_numpy(ak.flatten(idx_mask)),
                         )
-                        for k in ["id", "idx"]
-                    }
-                )
-      
-                # get uniques rawids for loading hit data
-                rawids = np.unique(ak.to_numpy(ak.ravel(tcm.id)))
-                energy = None
 
-                # for each table in the hit file
-                for rawid in rawids:
+                        # now bring back to original shape
+                        data_unf = ak.unflatten(energy_data, idx_loc)
 
-                    # get the hit table indices we need to load
-                    idx_mask = tcm.idx[tcm.id == rawid]
-                    idx_loc = ak.count(idx_mask, axis=-1)
-
-                    # read in energy data with mask above
-                    energy_data = lh5.read_as(
-                        f"ch{rawid}/hit/cuspEmax_ctc_cal",
-                        f_hit,
-                        library="ak",
-                        idx=ak.to_numpy(ak.flatten(idx_mask)),
-                    )
-
-                    # now bring back to original shape
-                    data_unf = ak.unflatten(energy_data, idx_loc)
-
-                    energy = (
-                        data_unf if energy is None else ak.concatenate((energy, data_unf), axis=-1)
-                    )
+                        energy = (
+                            data_unf if energy is None else ak.concatenate((energy, data_unf), axis=-1)
+                        )
+                    
                 
-             
-                d_evt["geds", "hit_rawid"] = tcm.id
-                d_evt["geds", "energy"] = energy
-                d_evt["period"]=period
-                d_evt["run"]=run
-                data = d_evt if data is None else ak.concatenate((data, d_evt))
-                
-                tf=time.time()
-          
-                N+=1
+                    d_evt["geds", "hit_rawid"] = tcm.id
+                    d_evt["geds", "energy"] = energy
+                    d_evt["period"]=period
+                    d_evt["run"]=run
+                    data = d_evt if data is None else ak.concatenate((data, d_evt))
+                    
+                    tf=time.time()
+            
+                    N+=1
 
-                ### for debug
-                if ( Nmax is not None and N>Nmax):
+                    ### for debug
+                    if ( Nmax is not None and N>Nmax):
+                        break
+                if ( Nmax is not None and N>Nmax ):
                     break
-            if ( Nmax is not None and N>Nmax ):
+            if ( Nmax is not None and N>Nmax):
                 break
-        if ( Nmax is not None and N>Nmax):
-            break
 
     return data
 
 #### paths (to be replaced with arg-parser)
 ### ------------------------------------------------
 
-paths_cfg={
-    "p03":
-        {
-            "tier":"pet",
-            "evt_path":"",
+paths_cfg={"p03":
+                {
+                    "tier":"pet",
+                    "evt_path":"/data2/public_new/prodenv/prod-blind/ref-v1.0.0/generated/tier/",
 
-        },
-    "p04":
-        {
-            "tier":"pet",
-            "evt_path":"",
-        },
-    "p06":
-        {
-            "tier":"pet",
-            "evt_path":"",
-        },
-    "p07":
-        {
-            "tier":"pet",
-            "evt_path":"",
-    "p08":
-        {
-            "tier":"pet",
-            "evt_path":"",
-        },
-    "p10":
-        {
-            "tier":"evt",
-            "evt_path":"",
-        }
+                },
+            "p04":
+                {
+                    "tier":"pet",
+                    "evt_path":"/data2/public_new/prodenv/prod-blind/ref-v1.0.0/generated/tier/",
+                },
+            "p06":
+                {
+                    "tier":"pet",
+                    "evt_path":"/data2/public_new/prodenv/prod-blind/ref-v1.0.0/generated/tier/",
+                },
+            "p07":
+                {
+                    "tier":"pet",
+                    "evt_path":"/data2/public_new/prodenv/prod-blind/ref-v1.0.0/generated/tier/"
+                },
+            "p08":
+                {
+                    "tier":"pet",
+                    "evt_path":"/data2/public_new/prodenv/prod-blind/ref-v1.0.0/generated/tier/",
+                },
+            "p10":
+                {
+                    "tier":"evt",
+                    "evt_path":"/data2/public/prodenv/prod-blind/tmp-auto/generated/tier/",
+                }
     }
 
-tier = 'evt'
-evt_path =f"/data2/public/prodenv/prod-blind/tmp-auto/generated/tier/{tier}/phy/"
-config_path = 'legend-simflow-config/tier/pdf/l200a/build-pdf-config.json'
+config_path = '/data1/users/tdixon/build_pdf/legend-simflow-config/tier/pdf/l200a/build-pdf-config.json'
 out_name ='l200a-p10-r000-dataset-tmp-auto.root'
-
+periods=["p10"]
 cross_talk_matrixs={
     'p03':'cross_talk/l200-p03-r000-x-talk-matrix.json',
     'p04':'cross_talk/l200-p03-r000-x-talk-matrix.json',
@@ -384,8 +390,8 @@ channel2string = get_vectorised_converter(geds_strings)
 channel2position = get_vectorised_converter(geds_positions)
 
 # analysis runs
-#runs=metadb.dataprod.config.analysis_runs
-runs = {'p10': ['r000']}
+runs=metadb.dataprod.config.analysis_runs
+runs['p10']= ['r000']
 
 ## times of each run
 run_times=get_run_times(metadb,runs,verbose=1) 
@@ -398,7 +404,7 @@ if os.path.exists(output_cache) and process_evt==False:
     data =ak.from_parquet(output_cache)
 else:
    
-    data=get_data_awkard(evt_path=evt_path,Nmax=None)
+    data=get_data_awkard(paths=paths_cfg,periods=periods,Nmax=None)
     print(data)
    
     ak.to_parquet(data,output_cache)
@@ -495,7 +501,6 @@ for _cut_name in rconfig["cuts"]:
 #### Now start filling histograms
 #### -----------------------------------------------------
             
-periods=["p10"]#["p03","p04","p06","p07","p08"]
 globs = {"ak": ak, "np": np}
 
 conversions={
