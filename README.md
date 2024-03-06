@@ -8,6 +8,9 @@ Currently there is:
 3. `plot-spectra.py` :  Plot the overlayed spectra
 4. `remove-OB.py` :     Script used to estimate the sensitivity to removing the OB
 
-The scripts can be run in LNGS in the current production enviroment as:
+The scripts can be run in LNGS in the current production enviroment as loaded with:
+    source "/data2/public/prodenv/setup.sh"
+
+As:
 
     dataprod-load-sw /data2/public/prodenv/prod-blind/ref-v1.0.0/config.json -- python <SCRIPT>
