@@ -1,6 +1,6 @@
 """
 Script to load the data for the LEGEND-200 background model
-Main Authors: Toby Dixon and Luigi Pertoldi based on a script from William Quinn
+Main Authors: Sofia Calgaro, Toby Dixon, Luigi Pertoldi based on a script from William Quinn
 """
 import glob
 import time
