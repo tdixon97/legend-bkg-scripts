@@ -113,8 +113,11 @@ def get_run_times(metadb:LegendMetadata,analysis_runs:dict,verbose:bool=True)->d
             }
     
     """
-    #runinfo = metadb.dataprod.runinfo
-    runinfo = json.load(open('/data1/users/calgaro/runinfo_new_p10.json'))
+    runinfo = metadb.dataprod.runinfo
+    runinfo_p10 = json.load(open('/data1/users/calgaro/runinfo_new_p10.json'))
+    runinfo["p10"]={}
+    for key,item in runinfo_p10["p10"].items():
+        runinfo["p10"][key]=item
 
     output={}
     first_time =None
@@ -138,7 +141,6 @@ def get_run_times(metadb:LegendMetadata,analysis_runs:dict,verbose:bool=True)->d
                         first_time=start_time
                     
                     start_time-=first_time
-                    
                     time = runinfo[period][run]["phy"]["livetime_in_s"]
                     end_time =start_time+time
 
@@ -230,18 +232,22 @@ def get_data_awkard(cfg:dict,periods=None,Nmax:int=None,run_list:dict={}):
 
     ## loop over period and run (so we can save this)
     N=0
-    for period,run_list in tqdm(runs.items()): 
+    print(json.dumps(run_list,indent=1))
+    for period,run_l in tqdm(run_list.items()): 
         
-        if (period is not None and period in periods):
-            for run in tqdm(run_list):
+        print(periods)
+        print(run_l)
+        if (periods is not None and period in periods):
 
+            for run in tqdm(run_l):
+                print(run)
                 tier =cfg[period]["tier"]
                 evt_path  =cfg[period]["evt_path"]
                 tier = 'evt' if 'tmp-auto' in evt_path else 'pet'
                 if tier == 'evt':
-                    fl_evt = glob.glob(evt_path+"/{}/{}/*-tier_evt.lh5".format(period,run))
+                    fl_evt = glob.glob(evt_path+"/"+tier+"/phy/{}/{}/*-tier_evt.lh5".format(period,run))
                 else:
-                    fl_evt = glob.glob(evt_path+"/{}/{}/*-tier_pet.lh5".format(period,run))
+                    fl_evt = glob.glob(evt_path+"/"+tier+"/phy/{}/{}/*-tier_pet.lh5".format(period,run))
         
                 for f_evt in fl_evt:
                     
@@ -366,7 +372,7 @@ with Path(config_path).open() as f:
 
 #### get the metadata information / mapping
 #### ---------------------------------------------
-metadb = LegendMetadata()
+metadb = LegendMetadata(rconfig["timestamp"])
 chmap = metadb.channelmap(rconfig["timestamp"])
 
 geds_mapping = {
@@ -404,7 +410,7 @@ if os.path.exists(output_cache) and process_evt==False:
     data =ak.from_parquet(output_cache)
 else:
    
-    data=get_data_awkard(paths=paths_cfg,periods=periods,Nmax=None)
+    data=get_data_awkard(cfg=paths_cfg,periods=periods,Nmax=None,run_list=runs)
     print(data)
    
     ak.to_parquet(data,output_cache)
