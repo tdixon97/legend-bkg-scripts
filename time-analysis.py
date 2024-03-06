@@ -20,7 +20,6 @@ from datetime import datetime, timezone
 import os
 import sys
 import re
-import utils
 import json
 from legendmeta import LegendMetadata
 
@@ -35,6 +34,43 @@ style = {
     "flow": None,
     "lw": 0.6,
 }
+
+def get_hist(obj,range:tuple=(132,4195),bins:int=10):
+    """                                                                                                                                                                                                    
+    Extract the histogram (hist package object) from the uproot histogram                                                                                                                                  
+    Parameters:                                                                                                                                                                                            
+        - obj: the uproot histogram                                                                                                                                                                        
+        - range: (tuple): the range of bins to select (in keV)                                                                                                                                             
+        - bins (int): the (constant) rebinning to apply                                                                                                                                                    
+    Returns:                                                                                                                                                                                               
+        - hist                                                                                                                                                                                             
+    """
+    return obj.to_hist()[range[0]:range[1]][hist.rebin(bins)]
+
+
+def normalise_histo(hist,factor=1):
+    """ Normalise a histogram into units of counts/keV"""
+
+    widths= np.diff(hist.axes.edges[0])
+
+    for i in range(hist.size-2):
+        hist[i]/=widths[i]
+        hist[i]*=factor
+    return hist
+
+def integrate_hist(hist,low,high):
+    """ Integrate the histogram"""
+
+    bin_centers= hist.axes.centers[0]
+
+    values = hist.values()
+    lower_index = np.searchsorted(bin_centers, low, side="right")
+    upper_index = np.searchsorted(bin_centers, high, side="left")
+    bin_contents_range =values[lower_index:upper_index]
+    bin_centers_range=bin_centers[lower_index:upper_index]
+
+    return np.sum(bin_contents_range)
+
 
 def get_run_times(metadb:LegendMetadata,analysis_runs:dict,verbose:bool=True)->dict:
     """ Get the livetime from the metadata
@@ -128,7 +164,7 @@ with uproot.open(path) as f:
 
             print(tstart,tstop,mass)
             if (f"mul_surv/{period}_{run};1" in f.keys()) and mass>0:
-                hists[period][run]=utils.get_hist(f[f"mul_surv/{period}_{run}"],(0,6000),1)
+                hists[period][run]=get_hist(f[f"mul_surv/{period}_{run}"],(0,6000),1)
 counts={}
 
 ### get counts
