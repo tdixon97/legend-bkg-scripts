@@ -196,7 +196,7 @@ with uproot.recreate(out_name) as output_file:
     output_file["counts"]=histo_time
     output_file["mass"]=histo_mass
 
-histo_time=utils.normalise_histo(histo_time)
+histo_time=normalise_histo(histo_time)
 fig, axes_full = lps.subplots(1, 1, figsize=(6,4), sharex=True)
 
 #histo_mass.plot(ax=axes_full,**style,color="black")
