@@ -306,6 +306,39 @@ def get_data_awkard(evt_path:str,Nmax:int=None):
 #### paths (to be replaced with arg-parser)
 ### ------------------------------------------------
 
+paths_cfg={
+    "p03":
+        {
+            "tier":"pet",
+            "evt_path":"",
+
+        },
+    "p04":
+        {
+            "tier":"pet",
+            "evt_path":"",
+        },
+    "p06":
+        {
+            "tier":"pet",
+            "evt_path":"",
+        },
+    "p07":
+        {
+            "tier":"pet",
+            "evt_path":"",
+    "p08":
+        {
+            "tier":"pet",
+            "evt_path":"",
+        },
+    "p10":
+        {
+            "tier":"evt",
+            "evt_path":"",
+        }
+    }
+
 tier = 'evt'
 evt_path =f"/data2/public/prodenv/prod-blind/tmp-auto/generated/tier/{tier}/phy/"
 config_path = 'legend-simflow-config/tier/pdf/l200a/build-pdf-config.json'
