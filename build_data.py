@@ -402,7 +402,8 @@ runs['p10']= ['r000']
 ## times of each run
 run_times=get_run_times(metadb,runs,verbose=1) 
 
-output_cache = "evt_tier.parquet"
+os.makedirs("outputs",exist_ok=True)
+output_cache = f"outputs/{out_name[0:-5]}.parquet"
 process_evt=True
 
 if os.path.exists(output_cache) and process_evt==False:
@@ -411,7 +412,6 @@ if os.path.exists(output_cache) and process_evt==False:
 else:
    
     data=get_data_awkard(cfg=paths_cfg,periods=periods,Nmax=None,run_list=runs)
-    print(data)
    
     ak.to_parquet(data,output_cache)
 
@@ -694,7 +694,7 @@ for _cut_name in hists:
 
 # write the hists to file (but only if they have none zero entries)
 # Changes the names to drop type_ etc
-out_file = uproot.recreate(out_name)
+out_file = uproot.recreate("outputs/"+out_name)
 for _cut_name, _hist_dict in hists.items():
     dir = out_file.mkdir(_cut_name)
     for key, item in _hist_dict.items():
