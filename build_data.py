@@ -16,7 +16,7 @@ import sys
 import ROOT
 import uproot
 from datetime import datetime
-
+import utils
 def get_vectorised_converter(mapping):
     def channel2other(channel):
         """ Extract which string a given channel is in"""
@@ -98,55 +98,6 @@ def get_m2_categories(channel_array,channel2string,channel2position):
     return np.array(category)
 
 
-def get_run_times(metadb:LegendMetadata,analysis_runs:dict,verbose:bool=True)->dict:
-    """ Get the livetime from the metadata
-    Parameters:
-        -metadb: the LegendMetadata object
-        - analysis_runs (dict) a dictonary of the analysis runs
-        -verbose: (bool), default True a bool to say if the livetime is printed to the screen
-    Returns:
-        -dict of the format
-        period :
-            {
-                run: [start_time,stop_time],
-                ...
-            }
-    
-    """
-    runinfo = metadb.dataprod.runinfo
-    runinfo_p10 = json.load(open('/data1/users/calgaro/runinfo_new_p10.json'))
-    runinfo["p10"]={}
-    for key,item in runinfo_p10["p10"].items():
-        runinfo["p10"][key]=item
-
-    output={}
-    first_time =None
-    ### loop over periods
-    for period in runinfo.keys():
-        if (period in analysis_runs.keys()):
-            output[period]={}
-        livetime_tot =0
-
-        ## loop over runs
-        for run in runinfo[period].keys():
-            
-            ## skip 'bad' runs
-            if (period in analysis_runs.keys() and run in analysis_runs[period]):
-
-                if "phy" in runinfo[period][run].keys():
-                    timestamp = datetime.strptime(runinfo[period][run]["phy"]["start_key"], '%Y%m%dT%H%M%SZ')
-                
-                    start_time = int(timestamp.timestamp())
-                    if (first_time is None):
-                        first_time=start_time
-                    
-                    start_time-=first_time
-                    time = runinfo[period][run]["phy"]["livetime_in_s"]
-                    end_time =start_time+time
-
-                    output[period][run]=[start_time,end_time]
-
-    return output
 
 
 def cross_talk_corrected_energies(energies:np.ndarray,channels:np.ndarray,cross_talk_matrix)->tuple[np.ndarray,bool]:
@@ -372,7 +323,7 @@ with Path(config_path).open() as f:
 
 #### get the metadata information / mapping
 #### ---------------------------------------------
-metadb = LegendMetadata(rconfig["timestamp"])
+metadb = LegendMetadata()
 chmap = metadb.channelmap(rconfig["timestamp"])
 
 geds_mapping = {
@@ -400,7 +351,7 @@ runs=metadb.dataprod.config.analysis_runs
 runs['p10']= ['r000']
 
 ## times of each run
-run_times=get_run_times(metadb,runs,verbose=1) 
+run_times=utils.get_run_times(metadb,runs,verbose=1) 
 
 os.makedirs("outputs",exist_ok=True)
 output_cache = f"outputs/{out_name[0:-5]}.parquet"

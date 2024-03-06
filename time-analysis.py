@@ -16,7 +16,7 @@ from hist import Hist
 import hist
 import argparse
 from datetime import datetime, timezone
-
+import utils
 import os
 import sys
 import re
@@ -72,65 +72,6 @@ def integrate_hist(hist,low,high):
     return np.sum(bin_contents_range)
 
 
-def get_run_times(metadb:LegendMetadata,analysis_runs:dict,verbose:bool=True)->dict:
-    """ Get the livetime from the metadata
-    Parameters:
-        -metadb: the LegendMetadata object
-        - analysis_runs (dict) a dictonary of the analysis runs
-        -verbose: (bool), default True a bool to say if the livetime is printed to the screen
-    Returns:
-        -dict of the format
-        period :
-            {
-                run: [start_time,stop_time,mass],
-                ...
-            }
-    
-    """
-
-
-    output={}
-    first_time =None
-    ### loop over periods
-    for period in metadb.dataprod.runinfo.keys():
-        if (period in analysis_runs.keys()):
-            output[period]={}
-        livetime_tot =0
-
-        ## loop over runs
-        for run in metadb.dataprod.runinfo[period].keys():
-            
-            ## skip 'bad' runs
-            if (period in analysis_runs.keys() and run in analysis_runs[period]):
-                
-                if "phy" in metadb.dataprod.runinfo[period][run].keys():
-                    if (run=="r006" and period=="p06"):
-                        continue
-                    ch = metadb.channelmap(metadb.dataprod.runinfo[period][run]["phy"]["start_key"])
-
-                    geds_list= [ _name for _name, _dict in ch.items() if ch[_name]["system"] == "geds" and 
-                                ch[_name]["analysis"]["usability"] in ["on","no_psd"]]
-
-                    timestamp = datetime.strptime(metadb.dataprod.runinfo[period][run]["phy"]["start_key"], '%Y%m%dT%H%M%SZ')
-                
-                    start_time = int(timestamp.timestamp())
-                    if (first_time is None):
-                        first_time=start_time
-                    
-                    start_time-=first_time
-                    
-                    time = metadb.dataprod.runinfo[period][run]["phy"]["livetime_in_s"]
-                    end_time =start_time+time
-                    mass=0
-                    for det in geds_list:
-                        mass += ch[det].production.mass_in_g/1000
-                    output[period][run]=[start_time,end_time,mass]
-
-                    
-                    
-
-    return output
-
 
 
 ### load the meta-data
@@ -138,7 +79,8 @@ def get_run_times(metadb:LegendMetadata,analysis_runs:dict,verbose:bool=True)->d
 metadb = LegendMetadata()
 chmap = metadb.channelmap(datetime.now())
 runs=metadb.dataprod.config.analysis_runs
-run_times=get_run_times(metadb,runs,verbose=1)
+runs['p10']= ['r000']
+run_times=utils.get_run_times(metadb,runs,verbose=1)
 
 ### load the data
 print(json.dumps(run_times,indent=1))
