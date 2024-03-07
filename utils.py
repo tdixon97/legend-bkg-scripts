@@ -11,7 +11,11 @@ import json
 import sys
 import ROOT
 import uproot
+import matplotlib.pyplot as plt
+import matplotlib as mpl
+
 from datetime import datetime
+from scipy.stats import poisson
 
 def get_run_times(metadb:LegendMetadata,analysis_runs:dict,verbose:bool=True)->dict:
     """ Get the livetime from the metadata
@@ -69,3 +73,45 @@ def get_run_times(metadb:LegendMetadata,analysis_runs:dict,verbose:bool=True)->d
                     output[period][run]=[start_time,end_time,mass]
 
     return output
+
+
+
+
+
+
+def get_error_bar(N:float):
+    """
+    A poisson error-bar for N observed counts.
+    """
+
+    x= np.linspace(0,5+2*N,5000)
+    y=poisson.pmf(N,x)
+    integral = y[np.argmax(y)]
+    bin_id_l = np.argmax(y)
+    bin_id_u = np.argmax(y)
+
+    integral_tot = np.sum(y)
+    while integral<0.683*integral_tot:
+
+        ### get left bin
+        if (bin_id_l>0 and bin_id_l<len(y)):
+            c_l =y[bin_id_l-1]
+        else:
+            c_l =0
+
+        if (bin_id_u>0 and bin_id_u<len(y)):
+            c_u =y[bin_id_u+1]
+        else:
+            c_u =0
+        
+        if (c_l>c_u):
+            integral+=c_l
+            bin_id_l-=1
+        else:
+            integral+=c_u
+            bin_id_u+=1
+        
+    low_quant = x[bin_id_l]
+    high_quant=x[bin_id_u]
+    print(low_quant,high_quant)
+    return N-low_quant,high_quant-N
