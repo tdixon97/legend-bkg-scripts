@@ -17,6 +17,6 @@ As:
     dataprod-load-sw /data2/public/prodenv/prod-blind/ref-v1.0.0/config.json -- python build_data.py --output <OUTNAME> --p <LIST OF PERIODS> --proc <PROC EVENT>
 
 Where:
-* <OUTNAME>: is the output file name (eg l200a-p10-r000-dataset-tmp-auto)
-* <LIST OF PERIODS>: Is the list of periods to proces eg ['p10']
-* <PROC EVENT>: is a boolean to get the data from evt files (True) or from parquet (if it exists - False)
+* < OUTNAME >: is the output file name (eg l200a-p10-r000-dataset-tmp-auto)
+* < LIST OF PERIODS >: Is the list of periods to proces eg ['p10']
+* < PROC EVENT >: is a boolean to get the data from evt files (True) or from parquet (if it exists - False)
