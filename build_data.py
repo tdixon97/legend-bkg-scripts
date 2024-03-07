@@ -409,7 +409,7 @@ def main():
     for ac in ac_dets:
         cut=cut & (data.geds.hit_rawid!=ac)
 
-    filtered_is_good_hit = data["geds"]['is_good_hit'][cut]
+    filtered_is_good_hit = data.geds.is_good_hit & (cut)
     data["geds"]["is_good_hit_old"] = filtered_is_good_hit
 
     
