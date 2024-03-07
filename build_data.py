@@ -156,7 +156,7 @@ def cross_talk_corrected_energies(energies:np.ndarray,channels:np.ndarray,cross_
         else:
             if (channels[0]==channels[1]):
                 return np.zeros(2),True
-            #logger.debug("We have pairs {}, {} in the data and not in the matrix".format(channels[0],channels[1]))
+            #logger.info("We have pairs {}, {} in the data and not in the matrix".format(channels[0],channels[1]))
             cross_talk_factors=np.zeros(2)
 
         energies_flip = np.array([energies[1],energies[0]])
@@ -189,15 +189,15 @@ def get_data_awkard(cfg:dict,periods=None,Nmax:int=None,run_list:dict={}):
 
     ## loop over period and run (so we can save this)
     N=0
-    logger.debug(f"This is the list of available periods/runs: {json.dumps(run_list,indent=1)}")
-    logger.debug("Starting to load evt tier for...")
+    logger.info(f"This is the list of available periods/runs: {json.dumps(run_list,indent=1)}")
+    logger.info("Starting to load evt tier for...")
     for period,run_l in tqdm(run_list.items()): 
         
         if (periods is not None and period in periods):
-            logger.debug(f"...{period}")
+            logger.info(f"...{period}")
 
             for run in tqdm(run_l):
-                logger.debug(f"...... {run}")
+                logger.info(f"...... {run}")
                 tier =cfg[period]["tier"]
                 evt_path  =cfg[period]["evt_path"]
                 tier = 'evt' if 'tmp-auto' in evt_path else 'pet'
@@ -222,7 +222,7 @@ def get_data_awkard(cfg:dict,periods=None,Nmax:int=None,run_list:dict={}):
                                 ],
                                 ak.num(d_evt.geds.hit_idx),
                             )
-                            for k in ["id", "idx"]
+                            for k in ["id", "idx"] 
                         }
                     )
         
@@ -276,25 +276,22 @@ def get_data_awkard(cfg:dict,periods=None,Nmax:int=None,run_list:dict={}):
 
 def main():
     parser = argparse.ArgumentParser(description="Script to load the data for the LEGEND-200 background model")
-    parser.add_argument("--config", help="Path to cfg file, eg /data1/users/tdixon/build_pdf/legend-simflow-config/tier/pdf/l200a/build-pdf-config.json")
-    parser.add_argument("--xtc", help="Path to xtc files, eg /data1/users/tdixon/build_pdf/cross_talk")
     parser.add_argument("--output", help="Name of output root file, eg l200a-p10-r000-dataset-tmp-auto")
     parser.add_argument("--p", help="List of periods to inspect")
     parser.add_argument("--proc", help="Boolean flag: True if you want to load from the pet/evt tier; if False and the parquet already exists, then we directly load data from this.")
 
     args = parser.parse_args()
 
-    config_path = args.config 
-    xtc_folder = args.xtc
+    config_path = "/data1/users/tdixon/build_pdf/legend-simflow-config/tier/pdf/l200a/build-pdf-config.json"
+    xtc_folder = "/data1/users/tdixon/build_pdf/cross_talk"
     out_name = f"{args.output}.root"
     periods = args.p
-    process_evt = args.proc
+    process_evt = False if args.proc=="False" else True # dunno why the bool(args.proc) does not work
 
     paths_cfg={"p03":
                     {
                         "tier":"pet",
                         "evt_path":"/data2/public/prodenv/prod-blind/ref-v1.0.0/generated/tier/",
-
                     },
                 "p04":
                     {
@@ -338,7 +335,7 @@ def main():
 
     #### get the metadata information / mapping
     #### ---------------------------------------------
-    logger.debug(f"... get the metadata information / mapping")
+    logger.info(f"... get the metadata information / mapping")
     metadb = LegendMetadata()
     chmap = metadb.channelmap(rconfig["timestamp"])
 
@@ -373,24 +370,23 @@ def main():
     output_cache = f"outputs/{out_name.replace('.root', '.parquet')}"
 
     if os.path.exists(output_cache) and process_evt==False:
-        logger.debug("Get from parquet")
+        logger.info("Get from parquet")
         data =ak.from_parquet(output_cache)
     else:
         data=get_data_awkard(cfg=paths_cfg,periods=periods,Nmax=None,run_list=runs)
         ak.to_parquet(data,output_cache)
 
-    data = data[ (~data.trigger.is_forced)  # no forced triggers
-                        & (~data.coincident.puls) # no pulser eventsdata
-                        & (~data.coincident.muon) # no muons
-                        & (data.geds.multiplicity > 0) # no purely lar triggered events
-                        & (ak.all(data.geds.is_good_hit_old, axis=-1))  # ON detectors and physical events
-                        ]
-
+    data = data[ (~data.trigger.is_forced)    # no forced triggers
+                    & (~data.coincident.puls) # no pulser eventsdata
+                    & (~data.coincident.muon) # no muons
+                    & (data.geds.multiplicity > 0) # no purely lar triggered events
+                    & (ak.all(data.geds.is_good_hit_old, axis=-1))  # ON detectors and physical events
+                    ]
     data["geds","on_multiplicity"]=ak.sum(data.geds.is_good_hit_old, axis=-1)
-
+    
     #### Now create the histograms to fill
-    #### -----------------------------------------------------------------------
-    logger.debug(f"... create the histos to fill (full period)")
+    #### --------------------------------------------------------------------
+    logger.info(f"... create the histos to fill (full period)")
 
     hists = {}
     for _cut_name in rconfig["cuts"]:
@@ -405,7 +401,7 @@ def main():
                 hists[_cut_name][_rawid] = ROOT.TH1F(hist_name, hist_title, nbins, emin, emax)
 
     ## save also hists per run (total only now)
-    logger.debug(f"... create the histos to fill (run by run)")
+    logger.info(f"... create the histos to fill (run by run)")
     run_hists={}
     for _cut_name in rconfig["cuts"]:
         if not rconfig["cuts"][_cut_name]["is_sum"]:
@@ -471,7 +467,7 @@ def main():
 
     #### Now start filling histograms
     #### -----------------------------------------------------
-    logger.debug(f"... fill histos")
+    logger.info(f"... fill histos")
                 
     globs = {"ak": ak, "np": np}
 
@@ -660,7 +656,7 @@ def main():
 
     # write the hists to file (but only if they have none zero entries)
     # Changes the names to drop type_ etc
-    logger.debug(f"... save histos")
+    logger.info(f"... save histos")
     out_file = uproot.recreate("outputs/"+out_name)
     for _cut_name, _hist_dict in hists.items():
         dir = out_file.mkdir(_cut_name)
@@ -677,7 +673,7 @@ def main():
             dir[name] = _hist
 
     out_file.close()
-    logger.debug(f"... done!")
+    logger.info(f"... done!")
 
 if __name__=="__main__":
     main()
