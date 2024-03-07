@@ -382,14 +382,7 @@ def main():
     ### FOR ON/AC -> OFF we need to modify the geds.energy geds.hit_rawid and geds.is_good_hit,
     ### to remove this hits, we then need to modify mulitplicity
 
-    debug=False
-    basic_cut= (~data.trigger.is_forced) & (~data.coincident.puls)& (~data.coincident.muon) & (data.geds.multiplicity > 0)  & (ak.all(data.geds.is_good_hit_old, axis=-1))
-    data=data[basic_cut]
-    if (debug):
-        print("energy = ",data.geds.energy)
-        print("rawids = ",data.geds.hit_rawid)
-        print("is good hit = ",data.geds.is_good_hit)
-       
+     
     off_dets=usability["ac_to_off"]
 
     ## create a mask of all the hits 
@@ -405,12 +398,6 @@ def main():
     data["geds","is_good_hit_old"] = filtered_is_good_hit
     data["geds","hit_rawid"] = filtered_hit_rawid
 
-    if (debug):
-        print(f"\nAfter turning to OFF {off_dets}")
-        print("energy ",data.geds.energy)
-        print("hit rawid ",data.geds.hit_rawid)
-        print("is good hit ",data.geds.is_good_hit_old)
-
 
     ### remove events with an AC det
     ac_dets=usability["on_to_ac"]
@@ -424,20 +411,10 @@ def main():
     
     data["geds","is_good_hit_old"] = filtered_is_good_hit
 
-    if (debug):
-        print(f"\nAfter turning to AC {ac_dets}")
-        print("energy ",data.geds.energy)
-        print("hit rawid ",data.geds.hit_rawid)
-        print("is good hit ",data.geds.is_good_hit_old)
-        print("\n")
-
+   
     ## recompute the multiplicity
     data["geds","multiplicity"]=ak.num(data.geds.is_good_hit_old, axis=-1)
     data["geds","on_multiplicity"]=ak.sum(data.geds.is_good_hit_old, axis=-1)
-
-    if (debug):
-        print("mul ",data["geds","multiplicity"])
-        print("on mul ",data["geds","on_multiplicity"])
 
     ### and the usual cuts
 
