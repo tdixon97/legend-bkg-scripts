@@ -20,3 +20,5 @@ Where:
 * `<OUTNAME>`: is the output file name (eg l200a-p10-r000-dataset-tmp-auto)
 * `<LIST OF PERIODS>`: Is the list of periods to proces eg ['p10']
 * `<PROC EVENT>`: is a boolean to get the data from evt files (True) or from parquet (if it exists - False)
+
+The rest of the scripts do not depend on `pygama` and can be run in the LEGEND container on LNGS.
