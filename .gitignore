@@ -6,6 +6,7 @@ outputs/*
 __pycache__/
 *.py[cod]
 *$py.class
+*.pdf 
 
 # C extensions
 *.so
