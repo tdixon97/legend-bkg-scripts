@@ -190,6 +190,7 @@ def get_data_awkard(cfg:dict,periods=None,Nmax:int=None,run_list:dict={},bad_key
     N=0
     logger.info(f"This is the list of available periods/runs: {json.dumps(run_list,indent=1)}")
     logger.info("Starting to load evt tier for...")
+
     for period,run_l in tqdm(run_list.items()): 
         
         if (periods is not None and period in periods):
@@ -215,7 +216,7 @@ def get_data_awkard(cfg:dict,periods=None,Nmax:int=None,run_list:dict={},bad_key
                 else:
                     fl_evt = glob.glob(evt_path+"/"+tier+"/phy/{}/{}/*-tier_pet.lh5".format(period,run))
                     for f in fl_evt:
-                        if not any(key in f for key in bad_keys):
+                        if any(key in f for key in bad_keys):
                             raise ValueError(f"Error the key {f} is present in the data but shouldnt be" )
 
                 ## loop
@@ -319,7 +320,6 @@ def main():
         for line in file:   
             bad_list.append(line.split(" ")[0])
 
-    print(bad_list)
     out_name = f"{args.output}.root"
     periods = args.p
     process_evt = False if args.proc=="False" else True # dunno why the bool(args.proc) does not work
