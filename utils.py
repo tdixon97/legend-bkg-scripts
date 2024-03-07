@@ -34,7 +34,7 @@ def get_run_times(metadb:LegendMetadata,analysis_runs:dict,verbose:bool=True)->d
     
     """
     runinfo = metadb.dataprod.runinfo
-    runinfo_p10 = json.load(open('/data1/users/calgaro/runinfo_new_p10.json'))
+    runinfo_p10 = json.load(open('/data1/users/calgaro/legend-metadata/dataprod/runinfo.json'))
     runinfo["p10"]={}
     for key,item in runinfo_p10["p10"].items():
         runinfo["p10"][key]=item
