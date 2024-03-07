@@ -382,7 +382,7 @@ def main():
     ### FOR ON/AC -> OFF we need to modify the geds.energy geds.hit_rawid and geds.is_good_hit,
     ### to remove this hits, we then need to modify mulitplicity
 
-    debug=True
+    debug=False
     basic_cut= (~data.trigger.is_forced) & (~data.coincident.puls)& (~data.coincident.muon) & (data.geds.multiplicity > 0)  & (ak.all(data.geds.is_good_hit_old, axis=-1))
     data=data[basic_cut]
     if (debug):
