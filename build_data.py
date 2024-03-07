@@ -165,7 +165,7 @@ def cross_talk_corrected_energies(energies:np.ndarray,channels:np.ndarray,cross_
     else:
         raise ValueError("Error: In the current skm files we should never have >2 energies")
 
-def get_data_awkard(cfg:dict,periods=None,Nmax:int=None,run_list:dict={}):
+def get_data_awkard(cfg:dict,periods=None,Nmax:int=None,run_list:dict={},bad_keys=[]):
     """
     A function to load the evt tier data into an awkard array also getting the energies
     Parameters
@@ -203,10 +203,24 @@ def get_data_awkard(cfg:dict,periods=None,Nmax:int=None,run_list:dict={}):
                  
                 if tier == 'evt':
                     fl_evt = glob.glob(evt_path+"/"+tier+"/phy/{}/{}/*-tier_evt.lh5".format(period,run))
+
+                    ### remove the bad keys
+                    fl_evt_new=[]
+                    for f in fl_evt:
+                        if not any(key in f for key in bad_keys):
+                            fl_evt_new.append(f)
+
+                    fl_evt = fl_evt_new
+
                 else:
                     fl_evt = glob.glob(evt_path+"/"+tier+"/phy/{}/{}/*-tier_pet.lh5".format(period,run))
-        
+                    for f in fl_evt:
+                        if not any(key in f for key in bad_keys):
+                            raise ValueError(f"Error the key {f} is present in the data but shouldnt be" )
+
+                ## loop
                 for f_evt in fl_evt:
+                    
                     
                     f_tcm = f_evt.replace(tier, "tcm")
                     f_hit = f_evt.replace(tier, "hit" if 'tmp-auto' in evt_path else 'pht')
@@ -225,10 +239,21 @@ def get_data_awkard(cfg:dict,periods=None,Nmax:int=None,run_list:dict={}):
                             for k in ["id", "idx"] 
                         }
                     )
-        
+                    tcm_unphysical =ak.Array(
+                        {
+                            k: ak.unflatten(
+                                lh5.read_as(f"hardware_tcm_1/array_{k}", f_tcm, library="ak")[
+                                    ak.flatten(d_evt.geds.is_unphysical_idx)
+                                ],
+                                ak.num(d_evt.geds.is_unphysical_idx),
+                            )
+                            for k in ["id", "idx"] 
+                        }
+                    )
                     # get uniques rawids for loading hit data
                     rawids = np.unique(ak.to_numpy(ak.ravel(tcm.id)))
                     energy = None
+                    physical =None
 
                     # for each table in the hit file
                     for rawid in rawids:
@@ -245,16 +270,18 @@ def get_data_awkard(cfg:dict,periods=None,Nmax:int=None,run_list:dict={}):
                             idx=ak.to_numpy(ak.flatten(idx_mask)),
                         )
 
+                    
                         # now bring back to original shape
                         data_unf = ak.unflatten(energy_data, idx_loc)
 
                         energy = (
                             data_unf if energy is None else ak.concatenate((energy, data_unf), axis=-1)
                         )
-                    
-                
+                     
+                    d_evt["geds", "unphysical_hit_rawid"] = tcm_unphysical.id
                     d_evt["geds", "hit_rawid"] = tcm.id
                     d_evt["geds", "energy"] = energy
+
                     d_evt["period"]=period
                     d_evt["run"]=run
                     data = d_evt if data is None else ak.concatenate((data, d_evt))
@@ -284,6 +311,15 @@ def main():
     usability_path = "/data1/users/tdixon/legend-bkg-scripts/cfg/usability_changes.json"
     config_path = "/data1/users/tdixon/build_pdf/legend-simflow-config/tier/pdf/l200a/build-pdf-config.json"
     xtc_folder = "/data1/users/tdixon/build_pdf/cross_talk"
+    bad_keys_path = "/data1/users/calgaro/legend-dataflow-config/ignore_keys.keylist"
+
+    ## read bad-keys
+    bad_list=[]
+    with open(bad_keys_path, 'r') as file:
+        for line in file:   
+            bad_list.append(line.split(" ")[0])
+
+    print(bad_list)
     out_name = f"{args.output}.root"
     periods = args.p
     process_evt = False if args.proc=="False" else True # dunno why the bool(args.proc) does not work
@@ -357,7 +393,6 @@ def main():
         if chmap[_name]["system"] == "geds"
     }
     strings = np.sort([item[1] for item in geds_strings.items()])
-    string2index = np.vectorize({element: index for index, element in enumerate(strings)}.get)
     channel2string = get_vectorised_converter(geds_strings)
     channel2position = get_vectorised_converter(geds_positions)
 
@@ -374,7 +409,7 @@ def main():
         logger.info("Get from parquet")
         data =ak.from_parquet(output_cache)
     else:
-        data=get_data_awkard(cfg=paths_cfg,periods=periods,Nmax=None,run_list=runs)
+        data=get_data_awkard(cfg=paths_cfg,periods=periods,Nmax=None,run_list=runs,bad_keys=bad_list)
         ak.to_parquet(data,output_cache)
 
     ### Add cuts on bad channels
@@ -385,10 +420,6 @@ def main():
 
      
     off_dets=usability["ac_to_off"]
-    cut_m2 = (data["geds"]["multiplicity"]==2)
-    cut_off = (ak.any(data["geds"]["hit_rawid"]==off_dets[0]))
-    cut_ac = (ak.any(data["geds"]["hit_rawid"]==usability["on_to_ac"][0]))
-   
  
     ## create a mask of all the hits 
     is_off =data.geds.hit_rawid>0
@@ -428,6 +459,7 @@ def main():
                     & (ak.all(data.geds.is_good_hit_old, axis=-1))  # ON detectors and physical events
                     ]
     
+
     if (np.all(data["geds","multiplicity"]==ak.num(data["geds","energy"]))==False):
         raise ValueError("Error the multiplicity must be equal to the length of the energy array")
     
