@@ -200,6 +200,7 @@ def get_data_awkard(cfg:dict,periods=None,Nmax:int=None,run_list:dict={}):
                 tier =cfg[period]["tier"]
                 evt_path  =cfg[period]["evt_path"]
                 tier = 'evt' if 'tmp-auto' in evt_path else 'pet'
+                 
                 if tier == 'evt':
                     fl_evt = glob.glob(evt_path+"/"+tier+"/phy/{}/{}/*-tier_evt.lh5".format(period,run))
                 else:
@@ -384,20 +385,23 @@ def main():
 
      
     off_dets=usability["ac_to_off"]
-
+    cut_m2 = (data["geds"]["multiplicity"]==2)
+    cut_off = (ak.any(data["geds"]["hit_rawid"]==off_dets[0]))
+    cut_ac = (ak.any(data["geds"]["hit_rawid"]==usability["on_to_ac"][0]))
+   
+ 
     ## create a mask of all the hits 
     is_off =data.geds.hit_rawid>0
     for off_det in off_dets:
         is_off = is_off &(data.geds.hit_rawid!=off_det)
 
     filtered_energy = data["geds"]['energy'][ is_off]
-    filtered_is_good_hit = data["geds"]['is_good_hit'][is_off]
+    filtered_is_good_hit = data["geds"]['is_good_hit_old'][is_off]
     filtered_hit_rawid =data["geds"]['hit_rawid'][is_off]
 
     data["geds","energy"] = filtered_energy
     data["geds","is_good_hit_old"] = filtered_is_good_hit
     data["geds","hit_rawid"] = filtered_hit_rawid
-
 
     ### remove events with an AC det
     ac_dets=usability["on_to_ac"]
@@ -411,7 +415,6 @@ def main():
     
     data["geds","is_good_hit_old"] = filtered_is_good_hit
 
-   
     ## recompute the multiplicity
     data["geds","multiplicity"]=ak.num(data.geds.is_good_hit_old, axis=-1)
     data["geds","on_multiplicity"]=ak.sum(data.geds.is_good_hit_old, axis=-1)
@@ -425,6 +428,19 @@ def main():
                     & (ak.all(data.geds.is_good_hit_old, axis=-1))  # ON detectors and physical events
                     ]
     
+    if (np.all(data["geds","multiplicity"]==ak.num(data["geds","energy"]))==False):
+        raise ValueError("Error the multiplicity must be equal to the length of the energy array")
+    
+    if (np.all(data["geds","multiplicity"]==ak.num(data["geds","hit_rawid"]))==False):
+        raise ValueError("Error the multiplicity must be equal to the length of the is good hit array")
+    
+    if (np.all(data["geds","multiplicity"]==ak.num(data["geds","is_good_hit_old"]))==False):
+        raise ValueError("Error the multiplicity must be equal to the length of the is good hit array")
+
+    for off_det in off_dets:
+        if (np.any(ak.any(data["geds","hit_rawid"]==off_det))):
+            raise ValueError(f"Error {off_det} is still present in some hit_rawid's despite being OFF")
+
     #### Now create the histograms to fill
     #### --------------------------------------------------------------------
     logger.info(f"... create the histos to fill (full period)")
