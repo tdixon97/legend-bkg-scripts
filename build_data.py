@@ -18,7 +18,6 @@ import ROOT
 import uproot
 import logging
 from datetime import datetime
-import utils
 
 # -----------------------------------------------------------
 # LOGGER SETTINGS 
@@ -281,7 +280,7 @@ def main():
     parser.add_argument("--proc", help="Boolean flag: True if you want to load from the pet/evt tier; if False and the parquet already exists, then we directly load data from this.")
 
     args = parser.parse_args()
-
+    usability_path = "/data1/users/tdixon/legend-bkg-scripts/cfg/usability_changes.json"
     config_path = "/data1/users/tdixon/build_pdf/legend-simflow-config/tier/pdf/l200a/build-pdf-config.json"
     xtc_folder = "/data1/users/tdixon/build_pdf/cross_talk"
     out_name = f"{args.output}.root"
@@ -333,6 +332,8 @@ def main():
     with Path(config_path).open() as f:
         rconfig = json.load(f)
 
+    with Path(usability_path).open() as f:
+        usability = json.load(f)
     #### get the metadata information / mapping
     #### ---------------------------------------------
     logger.info(f"... get the metadata information / mapping")
@@ -364,7 +365,6 @@ def main():
     runs['p10']=['r000']
 
     ## times of each run
-    run_times=utils.get_run_times(metadb,runs,verbose=1) 
 
     os.makedirs("outputs",exist_ok=True)
     output_cache = f"outputs/{out_name.replace('.root', '.parquet')}"
@@ -376,13 +376,54 @@ def main():
         data=get_data_awkard(cfg=paths_cfg,periods=periods,Nmax=None,run_list=runs)
         ak.to_parquet(data,output_cache)
 
+    ### Add cuts on bad channels
+    ### ---------------------------------------------------------------------
+    ### For ON->AC this is just another cut
+    ### FOR ON/AC -> OFF we need to modify the geds.energy geds.hit_rawid and geds.is_good_hit,
+    ### to remove this hits, we then need to modify mulitplicity
+
+     
+    off_dets=usability["ac_to_off"]
+
+    ## create a mask of all the hits 
+    is_off =data.geds.hit_rawid>0
+    for off_det in off_dets:
+        is_off = is_off &(data.geds.hit_rawid!=off_det)
+
+    filtered_energy = data["geds"]['energy'][ is_off]
+    filtered_is_good_hit = data["geds"]['is_good_hit'][is_off]
+    filtered_hit_rawid =data["geds"]['hit_rawid'][is_off]
+
+    data["geds","energy"] = filtered_energy
+    data["geds","is_good_hit_old"] = filtered_is_good_hit
+    data["geds","hit_rawid"] = filtered_hit_rawid
+
+
+    ### remove events with an AC det
+    ac_dets=usability["on_to_ac"]
+
+    # build the logic for is
+    cut=data.geds.hit_rawid>0
+    for ac in ac_dets:
+        cut=cut & (data.geds.hit_rawid!=ac)
+
+    filtered_is_good_hit = data.geds.is_good_hit_old & (cut)
+    
+    data["geds","is_good_hit_old"] = filtered_is_good_hit
+
+   
+    ## recompute the multiplicity
+    data["geds","multiplicity"]=ak.num(data.geds.is_good_hit_old, axis=-1)
+    data["geds","on_multiplicity"]=ak.sum(data.geds.is_good_hit_old, axis=-1)
+
+    ### and the usual cuts
+
     data = data[ (~data.trigger.is_forced)    # no forced triggers
                     & (~data.coincident.puls) # no pulser eventsdata
                     & (~data.coincident.muon) # no muons
                     & (data.geds.multiplicity > 0) # no purely lar triggered events
                     & (ak.all(data.geds.is_good_hit_old, axis=-1))  # ON detectors and physical events
                     ]
-    data["geds","on_multiplicity"]=ak.sum(data.geds.is_good_hit_old, axis=-1)
     
     #### Now create the histograms to fill
     #### --------------------------------------------------------------------
@@ -418,7 +459,6 @@ def main():
 
     sum_hists = {}
     string_diff=np.arange(7)
-    floor_diff=np.arange(8)
     names_m2 =[f"sd_{item1}" for item1 in string_diff]
     names_m2.extend(["all","cat_1","cat_2","cat_3"])
 

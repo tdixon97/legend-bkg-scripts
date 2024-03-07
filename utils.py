@@ -13,7 +13,8 @@ import ROOT
 import uproot
 import matplotlib.pyplot as plt
 import matplotlib as mpl
-
+from hist import Hist
+import hist
 from datetime import datetime
 from scipy.stats import poisson
 
@@ -113,5 +114,42 @@ def get_error_bar(N:float):
         
     low_quant = x[bin_id_l]
     high_quant=x[bin_id_u]
-    print(low_quant,high_quant)
     return N-low_quant,high_quant-N
+
+
+def get_hist(obj,range:tuple=(132,4195),bins:int=10):
+    """                                                                                                                                                                                                    
+    Extract the histogram (hist package object) from the uproot histogram                                                                                                                                  
+    Parameters:                                                                                                                                                                                            
+        - obj: the uproot histogram                                                                                                                                                                        
+        - range: (tuple): the range of bins to select (in keV)                                                                                                                                             
+        - bins (int): the (constant) rebinning to apply                                                                                                                                                    
+    Returns:                                                                                                                                                                                               
+        - hist                                                                                                                                                                                             
+    """
+    return obj.to_hist()[range[0]:range[1]][hist.rebin(bins)]
+
+
+def normalise_histo(hist,factor=1):
+    """ Normalise a histogram into units of counts/keV"""
+
+    widths= np.diff(hist.axes.edges[0])
+
+    for i in range(hist.size-2):
+        hist[i]/=widths[i]
+        hist[i]*=factor
+    return hist
+
+def integrate_hist(hist,low,high):
+    """ Integrate the histogram"""
+
+    bin_centers= hist.axes.centers[0]
+
+    values = hist.values()
+    lower_index = np.searchsorted(bin_centers, low, side="right")
+    upper_index = np.searchsorted(bin_centers, high, side="left")
+    bin_contents_range =values[lower_index:upper_index]
+    bin_centers_range=bin_centers[lower_index:upper_index]
+
+    return np.sum(bin_contents_range)
+

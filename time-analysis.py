@@ -37,46 +37,9 @@ style = {
     "lw": 0.6,
 }
 
-def get_hist(obj,range:tuple=(132,4195),bins:int=10):
-    """                                                                                                                                                                                                    
-    Extract the histogram (hist package object) from the uproot histogram                                                                                                                                  
-    Parameters:                                                                                                                                                                                            
-        - obj: the uproot histogram                                                                                                                                                                        
-        - range: (tuple): the range of bins to select (in keV)                                                                                                                                             
-        - bins (int): the (constant) rebinning to apply                                                                                                                                                    
-    Returns:                                                                                                                                                                                               
-        - hist                                                                                                                                                                                             
-    """
-    return obj.to_hist()[range[0]:range[1]][hist.rebin(bins)]
-
-
-def normalise_histo(hist,factor=1):
-    """ Normalise a histogram into units of counts/keV"""
-
-    widths= np.diff(hist.axes.edges[0])
-
-    for i in range(hist.size-2):
-        hist[i]/=widths[i]
-        hist[i]*=factor
-    return hist
-
-def integrate_hist(hist,low,high):
-    """ Integrate the histogram"""
-
-    bin_centers= hist.axes.centers[0]
-
-    values = hist.values()
-    lower_index = np.searchsorted(bin_centers, low, side="right")
-    upper_index = np.searchsorted(bin_centers, high, side="left")
-    bin_contents_range =values[lower_index:upper_index]
-    bin_centers_range=bin_centers[lower_index:upper_index]
-
-    return np.sum(bin_contents_range)
-
-
-
 
 ### load the meta-data
+### -----------------------
 
 metadb = LegendMetadata()
 chmap = metadb.channelmap(datetime.now())
@@ -84,18 +47,22 @@ runs=metadb.dataprod.config.analysis_runs
 runs['p10']= ['r000']
 run_times=utils.get_run_times(metadb,runs,verbose=1)
 
-print(json.dumps(run_times,indent=1))
+
 ### load the data
-print(json.dumps(run_times,indent=1))
+
 
 path="outputs/l200a-p34678-dataset-v1.0.root"
 path_p10 ="outputs/l200a-p10-r000-dataset-tmp-auto.root"
-low=3000
-high=6000
+low=1000
+high=1400
 out_name =f"test_{low}_{high}.root"
 
 hists={}
 hists_p10={}
+
+
+### extract the data and start / stop times
+### ----------------------------------------
 
 periods=["p03","p04","p06","p07","p08","p10"]
 bins=[]
@@ -113,16 +80,20 @@ with uproot.open(path) as f:
                 bins.append(tstart/60/60/24)
                 bins.append(tstop/60/60/24)
 
-                print(tstart,tstop,mass)
                 if (period!="p10" and f"mul_surv/{period}_{run};1" in f.keys()) and mass>0:
-                    hists[period][run]=get_hist(f[f"mul_surv/{period}_{run}"],(0,6000),1)
+                    hists[period][run]=utils.get_hist(f[f"mul_surv/{period}_{run}"],(0,6000),1)
                 elif (period=="p10" and f"mul_surv/{period}_{run};1" in f2.keys()) and mass>0:
-                    hists_p10[period][run]=get_hist(f2[f"mul_surv/{period}_{run}"],(0,6000),1)
+                    hists_p10[period][run]=utils.get_hist(f2[f"mul_surv/{period}_{run}"],(0,6000),1)
                 
-            
+
+
+### get counts in each run
+### -------------------------------------------------
+                    
 counts={}
 counts_p10={}
-### get counts
+
+
 for period in periods:
     run_list=runs[period]
 
@@ -132,17 +103,20 @@ for period in periods:
         counts_p10[period]={}
     for run in run_list:
         if run in hists[period].keys():
-            counts[period][run]=integrate_hist(hists[period][run],low,high)
+            counts[period][run]=utils.integrate_hist(hists[period][run],low,high)
         if run in hists_p10[period].keys():
-            counts_p10[period][run]=integrate_hist(hists_p10[period][run],low,high)
+            counts_p10[period][run]=utils.integrate_hist(hists_p10[period][run],low,high)
 
+
+### fill the histograms
+### -------------------------------------------------
 
 histo_time =( Hist.new.Variable(bins).Double())
 histo_mass =( Hist.new.Variable(bins).Double())
 histo_time_p10 =( Hist.new.Variable(bins).Double())
 histo_mass_p10 =( Hist.new.Variable(bins).Double())
 
-### fill the mass histo
+
 for period in periods:
     run_list=runs[period]
     for run in run_list:
@@ -163,19 +137,22 @@ with uproot.recreate(out_name) as output_file:
     output_file["counts_p10"]=histo_time_p10
     output_file["mass_p10"]=histo_mass_p10
 
-plot_hist=False
+plot_hist=True
 if (plot_hist==True):
-    histo_time_plot=normalise_histo(histo_time)
+    histo_time_plot=utils.normalise_histo(histo_time)
 else:
     histo_time_plot=copy.deepcopy(histo_time)
 
 if (plot_hist==True):
-    histo_time_plot_p10=normalise_histo(histo_time_p10)
+    histo_time_plot_p10=utils.normalise_histo(histo_time_p10)
 else:
     histo_time_plot_p10=copy.deepcopy(histo_time_p10)
-fig, axes_full = lps.subplots(1, 1, figsize=(4,3), sharex=True)
 
-#histo_mass.plot(ax=axes_full,**style,color="black")
+
+
+### Normalise the histos and save graph (errorbar) for plotting
+### ----------------------------------------------------------
+
 x=[]
 y=[]
 ey_low=[]
@@ -187,6 +164,7 @@ ey_high_p10=[]
 widths= np.diff(histo_mass.axes.edges[0])
 centers=histo_mass.axes.edges[0]
 
+
 for i in range(histo_mass.size-2):
     if (histo_mass[i]>0 and widths[i]>1):
         
@@ -195,11 +173,11 @@ for i in range(histo_mass.size-2):
         norm=(widths[i]*histo_mass[i])
         x.append(centers[i])
         y.append(histo_time[i]/norm)
-        print(histo_time[i])
         el,eh =utils.get_error_bar(histo_time[i])
         ey_low.append(el/norm)  
         ey_high.append(eh/norm)
-
+    else:
+        histo_time_plot[i]=0
 
 for i in range(histo_mass_p10.size-2):
     if (histo_mass_p10[i]>0 and widths[i]>1):
@@ -209,15 +187,21 @@ for i in range(histo_mass_p10.size-2):
         norm=(widths[i]*histo_mass_p10[i])
         x_p10.append(centers[i])
         y_p10.append(histo_time_p10[i]/norm)
-        print(histo_time[i])
         el,eh =utils.get_error_bar(histo_time_p10[i])
         ey_low_p10.append(el/norm)  
         ey_high_p10.append(eh/norm)
+    else:
+        histo_time_plot_p10[i]=0
+        
 
-print(histo_time_p10)
+### Make plots
+### --------------------------------------------------------
+
+fig, axes_full = lps.subplots(1, 1, figsize=(4,3), sharex=True)
+
 if (plot_hist):
-    histo_time.plot(ax=axes_full,**style,color=vset.blue,histtype="fill",alpha=0.5,label="WIth OB")
-    histo_time_p10.plot(ax=axes_full,**style,color=vset.orange,histtype="fill",alpha=0.5,label="NO OB")
+    histo_time_plot.plot(ax=axes_full,**style,color=vset.blue,histtype="fill",alpha=0.5,label="WIth OB")
+    histo_time_plot_p10.plot(ax=axes_full,**style,color=vset.orange,histtype="fill",alpha=0.5,label="NO OB")
 
 else:
     axes_full.errorbar(x=x,y=y,yerr=[np.abs(ey_low),np.abs(ey_high)],color=vset.blue,fmt="o",ecolor="grey",label="With OB")
