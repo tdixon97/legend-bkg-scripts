@@ -286,7 +286,7 @@ def main():
     out_name = f"{args.output}.root"
     periods = args.p
     process_evt = False if args.proc=="False" else True # dunno why the bool(args.proc) does not work
-    print(periods)
+
     paths_cfg={"p03":
                     {
                         "tier":"pet",
