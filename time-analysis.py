@@ -40,15 +40,20 @@ style = {
 
 ### looad the arguments
 parser = argparse.ArgumentParser(description="Script to plot the time dependence of counting rates in L200")
-parser.add_argument("--output", "-o",type=str,help="Name of output root file, eg l200a-vancouver_full_alpha will be appended with energy range",default="l200a-vancouver_full_alpha_3000_6000_keV")
+parser.add_argument("--output", "-o",type=str,help="Name of output root file, eg l200a-vancouver_full_alpha will be appended with energy range",default="l200a-vancouver_full_alpha")
 parser.add_argument("--input", "-i",type=str,help="Name of input root file",default = "outputs/l200a-vancouver_full-dataset-v0.0.0.root")
 parser.add_argument("--input_p10", "-I",type=str,help="Name of input root file for p10",default =None)
 parser.add_argument("--energy", "-e",type=str,help="comma seperate energy range",default="4000,6000")
+parser.add_argument("--plot_hist","-p",type=bool,help="Boolean flag to plot data as histogram ")
+parser.add_argument("--spectrum","-s",type=str,help="Spectrum to fit",default="mul_surv")
 
 args = parser.parse_args()
 output =args.output
 input = args.input
 input_p10 =args.input_p10
+plot_hist =bool(args.plot_hist)
+spectrum =args.spectrum
+
 include_p10=True
 
 if (input_p10 is None):
@@ -77,7 +82,7 @@ run_times=utils.get_run_times(metadb,runs,verbose=1)
 
 ### load the data
 
-out_name =f"{output}_{energy_low}_{energy_high}.root"
+out_name =f"{output}_{int(energy_low)}_{int(energy_high)}.root"
 
 hists={}
 hists_p10={}
@@ -105,8 +110,8 @@ with uproot.open(input) as f:
             bins.append(tstart/60/60/24)
             bins.append(tstop/60/60/24)
 
-            if (period!="p10" and f"mul_surv/{period}_{run};1" in f.keys()) and mass>0:
-                hists[period][run]=utils.get_hist(f[f"mul_surv/{period}_{run}"],(0,6000),1)
+            if (period!="p10" and f"{spectrum}/{period}_{run};1" in f.keys()) and mass>0:
+                hists[period][run]=utils.get_hist(f[f"{spectrum}/{period}_{run}"],(0,6000),1)
 
 
 ### now also p10   
@@ -120,8 +125,8 @@ if (include_p10):
                 if (run not in run_times[period]):
                     continue
 
-                if (period=="p10" and f"mul_surv/{period}_{run};1" in f.keys()) and mass>0:
-                    hists_p10[period][run]=utils.get_hist(f[f"mul_surv/{period}_{run}"],(0,6000),1)
+                if (period=="p10" and f"{spectrum}/{period}_{run};1" in f.keys()) and mass>0:
+                    hists_p10[period][run]=utils.get_hist(f[f"{spectrum}/{period}_{run}"],(0,6000),1)
           
 
 
@@ -174,14 +179,15 @@ for period in periods:
             histo_mass_p10[(tstart/60/60/24+tstop/60/60/24)*0.5j]=mass
             histo_time_p10[(tstart/60/60/24+tstop/60/60/24)*0.5j]=counts_p10[period][run]
 
-with uproot.recreate(out_name) as output_file:
+
+### save the time-histo (for fitting)
+with uproot.recreate("outputs/"+out_name) as output_file:
     output_file["counts"]=histo_time
     output_file["mass"]=histo_mass
     if (include_p10):
         output_file["counts_p10"]=histo_time_p10
         output_file["mass_p10"]=histo_mass_p10
 
-plot_hist=True
 if (plot_hist==True):
     histo_time_plot=utils.normalise_histo(histo_time)
 else:
@@ -215,7 +221,8 @@ centers=histo_mass.axes.edges[0]
 for i in range(histo_mass.size-2):
     if (histo_mass[i]>0 and widths[i]>1):
         
-        histo_time_plot[i]/=histo_mass[i]
+        if (plot_hist):
+            histo_time_plot[i]/=histo_mass[i]
 
         norm=(widths[i]*histo_mass[i])
         x.append(centers[i])
@@ -230,7 +237,8 @@ if (include_p10):
     for i in range(histo_mass_p10.size-2):
         if (histo_mass_p10[i]>0 and widths[i]>1):
             
-            histo_time_plot_p10[i]/=histo_mass_p10[i]
+            if (plot_hist):
+                histo_time_plot_p10[i]/=histo_mass_p10[i]
 
             norm=(widths[i]*histo_mass_p10[i])
             x_p10.append(centers[i])
@@ -261,4 +269,4 @@ axes_full.set_xlabel("Time [days]")
 axes_full.set_ylabel("Counts / kg -day")
 if (include_p10):
     axes_full.legend(loc="upper right")
-plt.savefig(out_name[0:-5]+".pdf")
+plt.savefig("outputs/"+out_name[0:-5]+".pdf")
