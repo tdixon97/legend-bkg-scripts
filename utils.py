@@ -4,12 +4,10 @@ import os
 import awkward as ak
 import numpy as np
 from pathlib import Path
-from lgdo import lh5
 from legendmeta import LegendMetadata
 from tqdm import tqdm
 import json
 import sys
-import ROOT
 import uproot
 import matplotlib.pyplot as plt
 import matplotlib as mpl
@@ -34,11 +32,7 @@ def get_run_times(metadb:LegendMetadata,analysis_runs:dict,verbose:bool=True)->d
     
     """
     runinfo = metadb.dataprod.runinfo
-    runinfo_p10 = json.load(open('/data1/users/calgaro/legend-metadata/dataprod/runinfo.json'))
-    runinfo["p10"]={}
-    for key,item in runinfo_p10["p10"].items():
-        runinfo["p10"][key]=item
-
+  
     output={}
     first_time =None
     ### loop over periods
@@ -53,7 +47,7 @@ def get_run_times(metadb:LegendMetadata,analysis_runs:dict,verbose:bool=True)->d
             ## skip 'bad' runs
             if (period in analysis_runs.keys() and run in analysis_runs[period]):
 
-                if "phy" in runinfo[period][run].keys():
+                if "phy" in runinfo[period][run].keys() and "livetime_in_s" in runinfo[period][run]["phy"].keys():
                     timestamp = datetime.strptime(runinfo[period][run]["phy"]["start_key"], '%Y%m%dT%H%M%SZ')
                     
                     ch = metadb.channelmap(metadb.dataprod.runinfo[period][run]["phy"]["start_key"])
