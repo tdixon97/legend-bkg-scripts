@@ -222,12 +222,11 @@ def get_data_awkard(cfg:dict,periods=None,Nmax:int=None,run_list:dict={},bad_key
                 ## loop
                 for f_evt in fl_evt:
                     
-                    
                     f_tcm = f_evt.replace(tier, "tcm")
                     f_hit = f_evt.replace(tier, "hit" if 'tmp-auto' in evt_path else 'pht')
 
                     d_evt = lh5.read_as("evt", f_evt, library="ak")
-                
+
                     # some black magic to get TCM data corresponding to geds.hit_idx
                     tcm = ak.Array(
                         {
@@ -286,7 +285,7 @@ def get_data_awkard(cfg:dict,periods=None,Nmax:int=None,run_list:dict={},bad_key
                     d_evt["period"]=period
                     d_evt["run"]=run
                     data = d_evt if data is None else ak.concatenate((data, d_evt))
-                    
+
                     tf=time.time()
             
                     N+=1
@@ -299,6 +298,16 @@ def get_data_awkard(cfg:dict,periods=None,Nmax:int=None,run_list:dict={},bad_key
             if ( Nmax is not None and N>Nmax):
                 break
 
+    # QCs naming convention was switched starting from p10-r001 (included)
+    #   - prior: OLD QC -> is_good_hit_old 
+    #            NEW QC -> is_good_hit
+    #   - after: OLD QC -> is_good_hit 
+    #            NEW QC -> is_good_hit_new
+    if ('is_good_hit_old' in data["geds"].fields): 
+        data = ak.rename(data["geds"], {"is_good_hit_old": "is_good_hit"}) 
+        data = ak.rename(data["geds"], {"is_good_hit": "is_good_hit_new"}) 
+        print(data["geds"].fields)
+
     return data
 
 
@@ -306,7 +315,8 @@ def main():
     parser = argparse.ArgumentParser(description="Script to load the data for the LEGEND-200 background model")
     parser.add_argument("--output", help="Name of output root file, eg l200a-p10-r000-dataset-tmp-auto")
     parser.add_argument("--p", help="List of periods to inspect")
-    parser.add_argument("--proc", help="Boolean flag: True if you want to load from the pet/evt tier; if False and the parquet already exists, then we directly load data from this.")
+    parser.add_argument("--proc", help="Boolean flag: True if you want to load from the pet/evt tier; if False and the parquet already exists, then we directly load data from this")
+    parser.add_argument("--qc", default="old", help="Set to 'new' if you want to apply new cuts (post Vancouver CM), otherwise default value is set to 'old' cuts")
 
     args = parser.parse_args()
     usability_path = "/data1/users/tdixon/legend-bkg-scripts/cfg/usability_changes.json"
@@ -322,7 +332,7 @@ def main():
 
     out_name = f"{args.output}.root"
     periods = args.p
-    process_evt = False if args.proc=="False" else True # dunno why the bool(args.proc) does not work
+    process_evt = False if args.proc=="False" else True 
 
     paths_cfg={"p03":
                     {
@@ -371,6 +381,7 @@ def main():
 
     with Path(usability_path).open() as f:
         usability = json.load(f)
+
     #### get the metadata information / mapping
     #### ---------------------------------------------
     logger.info(f"... get the metadata information / mapping")
@@ -398,7 +409,8 @@ def main():
 
     # analysis runs
     runs=metadb.dataprod.config.analysis_runs
-    runs['p10']=['r000']
+    #runs['p10']=['r000']
+    runs['p10']=['r001']
 
     ## times of each run
 
@@ -418,7 +430,7 @@ def main():
     ### FOR ON/AC -> OFF we need to modify the geds.energy geds.hit_rawid and geds.is_good_hit,
     ### to remove this hits, we then need to modify mulitplicity
 
-     
+    qcs_flag = "is_good_hit" if args.qc=="old" else "is_good_hit_new"
     off_dets=usability["ac_to_off"]
  
     ## create a mask of all the hits 
@@ -427,11 +439,11 @@ def main():
         is_off = is_off &(data.geds.hit_rawid!=off_det)
 
     filtered_energy = data["geds"]['energy'][ is_off]
-    filtered_is_good_hit = data["geds"]['is_good_hit_old'][is_off]
+    filtered_is_good_hit = data["geds"][qcs_flag][is_off]
     filtered_hit_rawid =data["geds"]['hit_rawid'][is_off]
 
     data["geds","energy"] = filtered_energy
-    data["geds","is_good_hit_old"] = filtered_is_good_hit
+    data["geds",qcs_flag] = filtered_is_good_hit
     data["geds","hit_rawid"] = filtered_hit_rawid
 
     ### remove events with an AC det
@@ -442,13 +454,13 @@ def main():
     for ac in ac_dets:
         cut=cut & (data.geds.hit_rawid!=ac)
 
-    filtered_is_good_hit = data.geds.is_good_hit_old & (cut)
+    filtered_is_good_hit = data.geds[qcs_flag] & (cut)
     
-    data["geds","is_good_hit_old"] = filtered_is_good_hit
+    data["geds",qcs_flag] = filtered_is_good_hit
 
     ## recompute the multiplicity
-    data["geds","multiplicity"]=ak.num(data.geds.is_good_hit_old, axis=-1)
-    data["geds","on_multiplicity"]=ak.sum(data.geds.is_good_hit_old, axis=-1)
+    data["geds","multiplicity"]=ak.num(data.geds[qcs_flag], axis=-1)
+    data["geds","on_multiplicity"]=ak.sum(data.geds[qcs_flag], axis=-1)
 
     ### and the usual cuts
 
@@ -456,7 +468,7 @@ def main():
                     & (~data.coincident.puls) # no pulser eventsdata
                     & (~data.coincident.muon) # no muons
                     & (data.geds.multiplicity > 0) # no purely lar triggered events
-                    & (ak.all(data.geds.is_good_hit_old, axis=-1))  # ON detectors and physical events
+                    & (ak.all(data.geds[qcs_flag], axis=-1))  # ON detectors and physical events
                     ]
     
 
@@ -466,7 +478,7 @@ def main():
     if (np.all(data["geds","multiplicity"]==ak.num(data["geds","hit_rawid"]))==False):
         raise ValueError("Error the multiplicity must be equal to the length of the is good hit array")
     
-    if (np.all(data["geds","multiplicity"]==ak.num(data["geds","is_good_hit_old"]))==False):
+    if (np.all(data["geds","multiplicity"]==ak.num(data["geds",qcs_flag]))==False):
         raise ValueError("Error the multiplicity must be equal to the length of the is good hit array")
 
     for off_det in off_dets:
