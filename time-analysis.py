@@ -9,6 +9,7 @@ lps.use('legend')
 import subprocess
 from collections import OrderedDict
 import uproot
+import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import numpy as np
@@ -30,6 +31,9 @@ vset = tc.tol_cset('vibrant')
 mset = tc.tol_cset('muted')
 plt.rc('axes', prop_cycle=plt.cycler('color', list(vset)))
 
+def expo(t,A,B,T):
+
+    return B + A*np.exp(-t*np.log(2)/T)
 
 style = {
   "yerr":False,
@@ -46,6 +50,7 @@ parser.add_argument("--input_p10", "-I",type=str,help="Name of input root file f
 parser.add_argument("--energy", "-e",type=str,help="comma seperate energy range",default="4000,6000")
 parser.add_argument("--plot_hist","-p",type=bool,help="Boolean flag to plot data as histogram ")
 parser.add_argument("--spectrum","-s",type=str,help="Spectrum to fit",default="mul_surv")
+parser.add_argument("--BAT_overlay","-B",type=str,help="Overlay the BAT fit? argument is the directory with BAT fit results",default=None)
 
 args = parser.parse_args()
 output =args.output
@@ -53,6 +58,7 @@ input = args.input
 input_p10 =args.input_p10
 plot_hist =bool(args.plot_hist)
 spectrum =args.spectrum
+overlay = args.BAT_overlay
 
 include_p10=True
 
@@ -269,4 +275,26 @@ axes_full.set_xlabel("Time [days]")
 axes_full.set_ylabel("Counts / kg -day")
 if (include_p10):
     axes_full.legend(loc="upper right")
+
+#### overlay BAT fit results
+range_x = axes_full.get_xlim()[1]
+if (overlay is not None):
+    with uproot.open(overlay+"/analysis.root") as file:
+        tree = file["fit_par_results"]
+        branches = tree.keys()
+        data={}
+        df_res = pd.DataFrame()
+        for branch_name in branches:
+            data[branch_name] = tree[branch_name].array()
+
+        df_res= pd.DataFrame(data)
+
+
+if overlay is not None:
+    t=np.linspace(0,range_x,10000)
+    N = expo(t,df_res["glob_mode"][0],df_res["glob_mode"][1],df_res['glob_mode'][2])
+
+    plt.plot(t,N,label="Global mode")
+    plt.legend(loc="upper right")
+print(out_name[0:-5])
 plt.savefig("outputs/"+out_name[0:-5]+".pdf")
