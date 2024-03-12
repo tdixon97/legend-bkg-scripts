@@ -1,4 +1,5 @@
 cross_talk/*
+bat_outputs/*
 *.parquet
 outputs/*
 *.root
