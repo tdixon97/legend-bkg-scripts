@@ -165,7 +165,7 @@ def cross_talk_corrected_energies(energies:np.ndarray,channels:np.ndarray,cross_
     else:
         raise ValueError("Error: In the current skm files we should never have >2 energies")
 
-def get_data_awkard(cfg:dict,periods=None,Nmax:int=None,run_list:dict={},bad_keys=[]):
+def get_data_awkard(cfg:dict,periods=None,Nmax:int=None,run_list:dict={},bad_keys=[],meta=None):
     """
     A function to load the evt tier data into an awkard array also getting the energies
     Parameters
@@ -232,9 +232,9 @@ def get_data_awkard(cfg:dict,periods=None,Nmax:int=None,run_list:dict={},bad_key
                         {
                             k: ak.unflatten(
                                 lh5.read_as(f"hardware_tcm_1/array_{k}", f_tcm, library="ak")[
-                                    ak.flatten(d_evt.geds.hit_idx)
+                                    ak.flatten(d_evt.geds.hit_idx_all)
                                 ],
-                                ak.num(d_evt.geds.hit_idx),
+                                ak.num(d_evt.geds.hit_idx_all),
                             )
                             for k in ["id", "idx"] 
                         }
@@ -282,6 +282,7 @@ def get_data_awkard(cfg:dict,periods=None,Nmax:int=None,run_list:dict={},bad_key
                     d_evt["geds", "hit_rawid"] = tcm.id
                     d_evt["geds", "energy"] = energy
 
+                  
                     d_evt["period"]=period
                     d_evt["run"]=run
                     data = d_evt if data is None else ak.concatenate((data, d_evt))
@@ -317,12 +318,14 @@ def main():
     parser.add_argument("--p", help="List of periods to inspect")
     parser.add_argument("--proc", help="Boolean flag: True if you want to load from the pet/evt tier; if False and the parquet already exists, then we directly load data from this")
     parser.add_argument("--qc", default="old", help="Set to 'new' if you want to apply new cuts (post Vancouver CM), otherwise default value is set to 'old' cuts")
+    parser.add_argument("--recompute", default=False, help="Boolean flag set to True if you want to recompute the QC flag after setting OFF detectors")
 
     args = parser.parse_args()
     usability_path = "/data1/users/tdixon/legend-bkg-scripts/cfg/usability_changes.json"
     config_path = "/data1/users/tdixon/build_pdf/legend-simflow-config/tier/pdf/l200a/build-pdf-config.json"
     xtc_folder = "/data1/users/tdixon/build_pdf/cross_talk"
     bad_keys_path = "/data1/users/calgaro/legend-dataflow-config/ignore_keys.keylist"
+    recompute_qc_flag =args.recompute
 
     ## read bad-keys
     bad_list=[]
@@ -421,7 +424,7 @@ def main():
         logger.info("Get from parquet")
         data =ak.from_parquet(output_cache)
     else:
-        data=get_data_awkard(cfg=paths_cfg,periods=periods,Nmax=None,run_list=runs,bad_keys=bad_list)
+        data=get_data_awkard(cfg=paths_cfg,periods=periods,Nmax=None,run_list=runs,bad_keys=bad_list,meta=metadb)
         ak.to_parquet(data,output_cache)
 
     ### Add cuts on bad channels
@@ -429,8 +432,9 @@ def main():
     ### For ON->AC this is just another cut
     ### FOR ON/AC -> OFF we need to modify the geds.energy geds.hit_rawid and geds.is_good_hit,
     ### to remove this hits, we then need to modify mulitplicity
-
     qcs_flag = "is_good_hit" if args.qc=="old" else "is_good_hit_new"
+                      
+    
     off_dets=usability["ac_to_off"]
  
     ## create a mask of all the hits 
@@ -438,6 +442,7 @@ def main():
     for off_det in off_dets:
         is_off = is_off &(data.geds.hit_rawid!=off_det)
 
+    ### we also need to update the QC flag
     filtered_energy = data["geds"]['energy'][ is_off]
     filtered_is_good_hit = data["geds"][qcs_flag][is_off]
     filtered_hit_rawid =data["geds"]['hit_rawid'][is_off]
@@ -445,9 +450,23 @@ def main():
     data["geds","energy"] = filtered_energy
     data["geds",qcs_flag] = filtered_is_good_hit
     data["geds","hit_rawid"] = filtered_hit_rawid
+    if (recompute_qc_flag):
+        data["geds","is_good_channel"]=filtered_hit_rawid>0
+
+
+    ### now recompute is physical 
+    unphysical_channels =data["geds","unphysical_hit_rawid"]
+
+    for c in off_dets:
+        unphysical_channels = unphysical_channels[unphysical_channels!=c]
+    num_bad_channels = ak.num(unphysical_channels,axis=-1)
+
+    is_physical_recomputed = num_bad_channels==0
+    if (recompute_qc_flag==True):
+        data["geds",qcs_flag]=is_physical_recomputed & data["geds","is_good_channel"]
 
     ### remove events with an AC det
-    ac_dets=usability["on_to_ac"]
+    ac_dets=usability["ac"]
 
     # build the logic for is
     cut=data.geds.hit_rawid>0
@@ -461,7 +480,7 @@ def main():
     ## recompute the multiplicity
     data["geds","multiplicity"]=ak.num(data.geds[qcs_flag], axis=-1)
     data["geds","on_multiplicity"]=ak.sum(data.geds[qcs_flag], axis=-1)
-
+  
     ### and the usual cuts
 
     data = data[ (~data.trigger.is_forced)    # no forced triggers
