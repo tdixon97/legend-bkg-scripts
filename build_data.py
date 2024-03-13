@@ -527,13 +527,15 @@ def main():
             sum_hists[_cut_name]={}
             hist_name = f"{_cut_name}_all_summed"
 
-            sum_hists[_cut_name]["all"] = hist_type(
-                hist_name,
-                hist_title,
-                rconfig["hist"]["nbins"],
-                rconfig["hist"]["emin"],
-                rconfig["hist"]["emax"],
-            )
+            
+            for name in names_m2:
+                sum_hists[_cut_name][name] = hist_type(
+                    hist_name,
+                    hist_title,
+                    rconfig["hist"]["nbins"],
+                    rconfig["hist"]["emin"],
+                    rconfig["hist"]["emax"],
+                )
         elif hist_type==ROOT.TH2F:
 
             sum_hists[_cut_name]={}
@@ -719,7 +721,12 @@ def main():
                             _corrected_energy_1_tmp,_corrected_energy_2_tmp,
                             np.ones(len(_summed_energy_array_tmp)),
                         )
-            
+                    else:
+                        sum_hists[_cut_name][name].FillN(
+                            len(_summed_energy_array_tmp),
+                            _summed_energy_array_tmp,
+                            np.ones(len(_summed_energy_array_tmp)),
+                        )
     for _cut_name in hists:
         hists[_cut_name]["all"] = ROOT.TH1F(
             f"{_cut_name}_all",
