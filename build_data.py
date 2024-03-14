@@ -165,7 +165,7 @@ def cross_talk_corrected_energies(energies:np.ndarray,channels:np.ndarray,cross_
     else:
         raise ValueError("Error: In the current skm files we should never have >2 energies")
 
-def get_data_awkard(cfg:dict,periods=None,Nmax:int=None,run_list:dict={},bad_keys=[],meta=None):
+def get_data_awkard(cfg:dict,periods=None,Nmax:int=None,run_list:dict={},bad_keys=[],metadb=LegendMetadata()):
     """
     A function to load the evt tier data into an awkard array also getting the energies
     Parameters
@@ -281,10 +281,21 @@ def get_data_awkard(cfg:dict,periods=None,Nmax:int=None,run_list:dict={},bad_key
                     d_evt["geds", "unphysical_hit_rawid"] = tcm_unphysical.id
                     d_evt["geds", "hit_rawid"] = tcm.id
                     d_evt["geds", "energy"] = energy
+                 
 
-                  
+                    ch = metadb.channelmap(metadb.dataprod.runinfo[period][run]["phy"]["start_key"])
+                    ac = [ _dict["daq"]["rawid"] for _name, _dict in ch.items() if ch[_name]["system"] == "geds" and ch[_name]["analysis"]["usability"] in ["ac"]]
+                    off= [ _dict["daq"]["rawid"] for _name, _dict in ch.items() if ch[_name]["system"] == "geds" and ch[_name]["analysis"]["usability"] in ["off"]]
+
+                    d_evt["geds","is_good_channel"]=d_evt["geds","hit_rawid"]>0
+                    for a in ac:
+                        d_evt["geds","is_good_channel"]=d_evt["geds","is_good_channel"]&(d_evt["geds","hit_rawid"]!=a)
+                    for a in off:
+                        d_evt["geds","is_good_channel"]=d_evt["geds","is_good_channel"]&(d_evt["geds","hit_rawid"]!=a)
+             
                     d_evt["period"]=period
                     d_evt["run"]=run
+                  
                     data = d_evt if data is None else ak.concatenate((data, d_evt))
 
                     tf=time.time()
@@ -304,13 +315,129 @@ def get_data_awkard(cfg:dict,periods=None,Nmax:int=None,run_list:dict={},bad_key
     #            NEW QC -> is_good_hit
     #   - after: OLD QC -> is_good_hit 
     #            NEW QC -> is_good_hit_new
+    print(data["geds"].fields)
     if ('is_good_hit_old' in data["geds"].fields): 
-        data = ak.rename(data["geds"], {"is_good_hit_old": "is_good_hit"}) 
-        data = ak.rename(data["geds"], {"is_good_hit": "is_good_hit_new"}) 
+        #data = ak.rename(data["geds"], {"is_good_hit_old": "is_good_hit"}) 
+        #data = ak.rename(data["geds"], {"is_good_hit": "is_good_hit_new"}) 
+        data["geds","is_good_hit_new"]=data["geds","is_good_hit"]
+        data["geds","is_good_hit"]=data["geds","is_good_hit_old"]
         print(data["geds"].fields)
 
     return data
 
+def filter_off_ac(data,qc="is_good_hit",ac_dets=[],off_dets=[],verbose=False):
+    """
+    Function to remove the hits in off detectors and recompute the QC flag.
+    Also sets some detectors to AC mode:
+    Parameters:
+        -data : awkward array of the data
+        - qc (str): the quality cut flag
+        - ac_dets (list): list of detector rawid's to set to AC
+        - off_dets (list): list of detector rawids to set off
+        -verbose (bool)
+    Returns:
+        - a new awkward array
+
+    """
+    data = data[ (~data.trigger.is_forced)    # no forced triggers
+                    & (~data.coincident.puls) # no pulser eventsdata
+                    & (~data.coincident.muon) ]
+    data["geds","on_multiplicity"]=ak.sum(data.geds[qcs_flag], axis=-1)
+
+    if (verbose):
+        print("Data")
+        print_events(data,qcs_flag)
+    
+    
+ 
+    ### REMOVE hits in off dets in energy, qc_flag and rawid
+    ### ----------------------------------------------------
+    is_off =data.geds.hit_rawid>0
+    for off_det in off_dets:
+        is_off = is_off &(data.geds.hit_rawid!=off_det)
+
+    ### we also need to update the QC flag
+    filtered_energy = data["geds"]['energy'][ is_off]
+    filtered_is_good_hit = data["geds"][qcs_flag][is_off]
+    filtered_is_good_channel = data["geds"]["is_good_channel"][is_off]
+
+    filtered_hit_rawid =data["geds"]['hit_rawid'][is_off]
+
+    data["geds","energy"] = filtered_energy
+    data["geds",qcs_flag] = filtered_is_good_hit
+    data["geds","hit_rawid"] = filtered_hit_rawid
+    data["geds","is_good_channel"] = filtered_is_good_channel
+
+    data["geds","multiplicity"]=ak.num(data.geds[qcs_flag], axis=-1)
+    data["geds","on_multiplicity"]=ak.sum(data.geds[qcs_flag], axis=-1)
+
+    if (verbose):
+        print("After removing OFF")
+        print_events(data,qcs_flag)
+
+    ### Recompute is_physical
+    ### -----------------------------------------------------
+    
+    if (recompute_qc_flag==True):
+
+        unphysical_channels =data["geds","unphysical_hit_rawid"]
+     
+        for c in off_dets:
+            unphysical_channels = unphysical_channels[unphysical_channels!=c]
+
+        num_bad_channels = ak.num(unphysical_channels,axis=-1)
+        data["geds","unphysical_hit_rawid"]=unphysical_channels
+        is_physical_recomputed = (num_bad_channels==0)
+        
+
+        data["geds",qcs_flag]=is_physical_recomputed & data["geds","is_good_channel"]
+    
+    
+    data["geds","multiplicity"]=ak.num(data.geds[qcs_flag], axis=-1)
+    data["geds","on_multiplicity"]=ak.sum(data.geds[qcs_flag], axis=-1)
+
+    if (verbose):
+        print("After fixing QC flag")
+        print_events(data,qcs_flag)
+
+
+    ### Modify the QC flag so AC dets have is_good_hit false
+    ### ---------------------------------------------------
+    ac_dets=usability["ac"]
+
+    cut=data.geds.hit_rawid>0
+    for ac in ac_dets:
+        cut=cut & (data.geds.hit_rawid!=ac)
+
+    
+    filtered_is_good_hit = data["geds"][qcs_flag] & (cut)
+    
+    
+    data["geds",qcs_flag] = filtered_is_good_hit
+
+    data["geds","multiplicity"]=ak.num(data.geds[qcs_flag], axis=-1)
+    data["geds","on_multiplicity"]=ak.sum(data.geds[qcs_flag], axis=-1)
+    if (verbose):
+        print("After changing ACs")
+        print_events(data,qcs_flag)
+
+    ## recompute the multiplicity
+    data["geds","multiplicity"]=ak.num(data.geds[qcs_flag], axis=-1)
+    data["geds","on_multiplicity"]=ak.sum(data.geds[qcs_flag], axis=-1)
+
+    return data
+
+
+def print_events(data,qc):
+    """ Print of the events """
+    vars = ["energy","hit_rawid","is_good_channel","unphysical_hit_rawid",qc,"multiplicity","on_multiplicity"]
+    for v in vars:
+        p = v+"                 "
+        for i in range(min(len(data),5)):
+            p+=str(data["geds"][v][i])+" "
+        print(p)
+  
+    print("\n\n")
 
 def main():
     parser = argparse.ArgumentParser(description="Script to load the data for the LEGEND-200 background model")
@@ -384,11 +511,10 @@ def main():
 
     with Path(usability_path).open() as f:
         usability = json.load(f)
-
     #### get the metadata information / mapping
     #### ---------------------------------------------
     logger.info(f"... get the metadata information / mapping")
-    metadb = LegendMetadata()
+    metadb = LegendMetadata("/data2/public/prodenv/prod-blind/tmp-auto/inputs")
     chmap = metadb.channelmap(rconfig["timestamp"])
 
     geds_mapping = {
@@ -412,20 +538,22 @@ def main():
 
     # analysis runs
     runs=metadb.dataprod.config.analysis_runs
-    #runs['p10']=['r000']
-    runs['p10']=['r001']
-
+    runs['p10']=['r000','r001']
     ## times of each run
 
     os.makedirs("outputs",exist_ok=True)
     output_cache = f"outputs/{out_name.replace('.root', '.parquet')}"
-
+    print(out_name)
     if os.path.exists(output_cache) and process_evt==False:
         logger.info("Get from parquet")
         data =ak.from_parquet(output_cache)
     else:
-        data=get_data_awkard(cfg=paths_cfg,periods=periods,Nmax=None,run_list=runs,bad_keys=bad_list,meta=metadb)
+        data=get_data_awkard(cfg=paths_cfg,periods=periods,Nmax=None,run_list=runs,bad_keys=bad_list,metadb=metadb)
         ak.to_parquet(data,output_cache)
+
+    print("Got data")
+    recompute_qc_flag=True
+
 
     ### Add cuts on bad channels
     ### ---------------------------------------------------------------------
@@ -433,63 +561,18 @@ def main():
     ### FOR ON/AC -> OFF we need to modify the geds.energy geds.hit_rawid and geds.is_good_hit,
     ### to remove this hits, we then need to modify mulitplicity
     qcs_flag = "is_good_hit" if args.qc=="old" else "is_good_hit_new"
-                      
     
-    off_dets=usability["ac_to_off"]
- 
-    ## create a mask of all the hits 
-    is_off =data.geds.hit_rawid>0
-    for off_det in off_dets:
-        is_off = is_off &(data.geds.hit_rawid!=off_det)
-
-    ### we also need to update the QC flag
-    filtered_energy = data["geds"]['energy'][ is_off]
-    filtered_is_good_hit = data["geds"][qcs_flag][is_off]
-    filtered_hit_rawid =data["geds"]['hit_rawid'][is_off]
-
-    data["geds","energy"] = filtered_energy
-    data["geds",qcs_flag] = filtered_is_good_hit
-    data["geds","hit_rawid"] = filtered_hit_rawid
-    if (recompute_qc_flag):
-        data["geds","is_good_channel"]=filtered_hit_rawid>0
-
-
-    ### now recompute is physical 
-    unphysical_channels =data["geds","unphysical_hit_rawid"]
-
-    for c in off_dets:
-        unphysical_channels = unphysical_channels[unphysical_channels!=c]
-    num_bad_channels = ak.num(unphysical_channels,axis=-1)
-
-    is_physical_recomputed = num_bad_channels==0
-    if (recompute_qc_flag==True):
-        data["geds",qcs_flag]=is_physical_recomputed & data["geds","is_good_channel"]
-
-    ### remove events with an AC det
-    ac_dets=usability["ac"]
-
-    # build the logic for is
-    cut=data.geds.hit_rawid>0
-    for ac in ac_dets:
-        cut=cut & (data.geds.hit_rawid!=ac)
-
-    filtered_is_good_hit = data.geds[qcs_flag] & (cut)
+    ### first print the data
+    data=filter_off_ac(qc=qcs_flag,off_usability["ac_to_off"],ac=usability["ac"])
     
-    data["geds",qcs_flag] = filtered_is_good_hit
-
-    ## recompute the multiplicity
-    data["geds","multiplicity"]=ak.num(data.geds[qcs_flag], axis=-1)
-    data["geds","on_multiplicity"]=ak.sum(data.geds[qcs_flag], axis=-1)
-  
     ### and the usual cuts
-
     data = data[ (~data.trigger.is_forced)    # no forced triggers
                     & (~data.coincident.puls) # no pulser eventsdata
                     & (~data.coincident.muon) # no muons
                     & (data.geds.multiplicity > 0) # no purely lar triggered events
-                    & (ak.all(data.geds[qcs_flag], axis=-1))  # ON detectors and physical events
+                   &(ak.all(data.geds[qcs_flag],axis=-1))
                     ]
-    
+  
 
     if (np.all(data["geds","multiplicity"]==ak.num(data["geds","energy"]))==False):
         raise ValueError("Error the multiplicity must be equal to the length of the energy array")
@@ -556,10 +639,11 @@ def main():
 
         if hist_type == ROOT.TH1F:
             sum_hists[_cut_name]={}
-            hist_name = f"{_cut_name}_all_summed"
+           
 
             
             for name in names_m2:
+                hist_name = f"{_cut_name}_{name}_summed"
                 sum_hists[_cut_name][name] = hist_type(
                     hist_name,
                     hist_title,
