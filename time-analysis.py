@@ -75,7 +75,7 @@ energy_high = float(energy.split(",")[1])
 ### ----------------------
 
 
-metadb = LegendMetadata()
+metadb = LegendMetadata("/data2/public/prodenv/prod-blind/ref-v1.0.0/inputs/")
 
 chmap = metadb.channelmap(datetime.now())
 runs=metadb.dataprod.config.analysis_runs
