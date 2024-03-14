@@ -325,7 +325,7 @@ def get_data_awkard(cfg:dict,periods=None,Nmax:int=None,run_list:dict={},bad_key
 
     return data
 
-def filter_off_ac(data,qc="is_good_hit",ac_dets=[],off_dets=[],verbose=False):
+def filter_off_ac(data,qcs_flag="is_good_hit",ac_dets=[],off_dets=[],verbose=False,recompute_qc_flag=True):
     """
     Function to remove the hits in off detectors and recompute the QC flag.
     Also sets some detectors to AC mode:
@@ -338,10 +338,14 @@ def filter_off_ac(data,qc="is_good_hit",ac_dets=[],off_dets=[],verbose=False):
     Returns:
         - a new awkward array
 
+    Example of filtering an off detector:
+    
+ 
+    
+    }
+
     """
-    data = data[ (~data.trigger.is_forced)    # no forced triggers
-                    & (~data.coincident.puls) # no pulser eventsdata
-                    & (~data.coincident.muon) ]
+    
     data["geds","on_multiplicity"]=ak.sum(data.geds[qcs_flag], axis=-1)
 
     if (verbose):
@@ -403,7 +407,6 @@ def filter_off_ac(data,qc="is_good_hit",ac_dets=[],off_dets=[],verbose=False):
 
     ### Modify the QC flag so AC dets have is_good_hit false
     ### ---------------------------------------------------
-    ac_dets=usability["ac"]
 
     cut=data.geds.hit_rawid>0
     for ac in ac_dets:
@@ -411,9 +414,11 @@ def filter_off_ac(data,qc="is_good_hit",ac_dets=[],off_dets=[],verbose=False):
 
     
     filtered_is_good_hit = data["geds"][qcs_flag] & (cut)
-    
+    filtered_is_good_channel = data["geds"]["is_good_channel"] & (cut)
+
     
     data["geds",qcs_flag] = filtered_is_good_hit
+    data["geds","is_good_channel"] = filtered_is_good_channel
 
     data["geds","multiplicity"]=ak.num(data.geds[qcs_flag], axis=-1)
     data["geds","on_multiplicity"]=ak.sum(data.geds[qcs_flag], axis=-1)
@@ -563,7 +568,10 @@ def main():
     qcs_flag = "is_good_hit" if args.qc=="old" else "is_good_hit_new"
     
     ### first print the data
-    data=filter_off_ac(data,qc=qcs_flag,off_dets=usability["ac_to_off"],ac_dets=usability["ac"])
+    data = data[ (~data.trigger.is_forced)    # no forced triggers
+                    & (~data.coincident.puls) # no pulser eventsdata
+                    & (~data.coincident.muon) ]
+    data=filter_off_ac(data,qcs_flag=qcs_flag,off_dets=usability["ac_to_off"],ac_dets=usability["ac"])
     
     ### and the usual cuts
     data = data[ (~data.trigger.is_forced)    # no forced triggers
@@ -885,5 +893,6 @@ def main():
     out_file.close()
     logger.info(f"... done!")
 
-if __name__=="__main__":
+
+if __name__ == "__main__":
     main()
