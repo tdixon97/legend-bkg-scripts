@@ -16,7 +16,7 @@ import hist
 from datetime import datetime
 from scipy.stats import poisson
 
-def get_run_times(metadb:LegendMetadata,analysis_runs:dict,verbose:bool=True)->dict:
+def get_run_times(metadb:LegendMetadata,analysis_runs:dict,verbose:bool=True,ac=[],off=[])->dict:
     """ Get the livetime from the metadata
     Parameters:
         -metadb: the LegendMetadata object
@@ -32,7 +32,6 @@ def get_run_times(metadb:LegendMetadata,analysis_runs:dict,verbose:bool=True)->d
     
     """
     runinfo = metadb.dataprod.runinfo
-  
     output={}
     first_time =None
     ### loop over periods
@@ -52,7 +51,7 @@ def get_run_times(metadb:LegendMetadata,analysis_runs:dict,verbose:bool=True)->d
                     
                     ch = metadb.channelmap(metadb.dataprod.runinfo[period][run]["phy"]["start_key"])
 
-                    geds_list= [ _name for _name, _dict in ch.items() if ch[_name]["system"] == "geds" and 
+                    geds_list= [ (_name,_dict["daq"]["rawid"]) for _name, _dict in ch.items() if ch[_name]["system"] == "geds" and 
                                 ch[_name]["analysis"]["usability"] in ["on","no_psd"]]
 
                     start_time = int(timestamp.timestamp())
@@ -64,7 +63,9 @@ def get_run_times(metadb:LegendMetadata,analysis_runs:dict,verbose:bool=True)->d
                     end_time =start_time+time
                     mass=0
                     for det in geds_list:
-                        mass += ch[det].production.mass_in_g/1000
+                   
+                        if (det[1] not in ac) and (det[1] not in off):
+                            mass += ch[det[0]].production.mass_in_g/1000
                     output[period][run]=[start_time,end_time,mass]
 
     return output

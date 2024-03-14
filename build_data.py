@@ -563,7 +563,7 @@ def main():
     qcs_flag = "is_good_hit" if args.qc=="old" else "is_good_hit_new"
     
     ### first print the data
-    data=filter_off_ac(qc=qcs_flag,off_usability["ac_to_off"],ac=usability["ac"])
+    data=filter_off_ac(data,qc=qcs_flag,off_dets=usability["ac_to_off"],ac_dets=usability["ac"])
     
     ### and the usual cuts
     data = data[ (~data.trigger.is_forced)    # no forced triggers
