@@ -75,14 +75,14 @@ energy_high = float(energy.split(",")[1])
 ### ----------------------
 
 
-metadb = LegendMetadata("/data2/public/prodenv/prod-blind/ref-v1.0.0/inputs/")
+metadb = LegendMetadata("/data2/public/prodenv/prod-blind/tmp-auto/inputs/")
 
 chmap = metadb.channelmap(datetime.now())
 runs=metadb.dataprod.config.analysis_runs
 
 ## hardcoded for now
 if (include_p10):
-    runs["p10"]=["r001"]
+    runs["p10"]=["r000","r001"]
 
 run_times=utils.get_run_times(metadb,runs,verbose=1)
 
@@ -274,8 +274,8 @@ else:
 axes_full.set_xlabel("Time [days]")
 axes_full.set_ylabel("Counts / kg -day")
 if (include_p10):
-    axes_full.legend(loc="upper right")
-
+    axes_full.legend(loc="upper left")
+axes_full.set_title(f"{int(energy_low)}, {int(energy_high)} keV")
 #### overlay BAT fit results
 range_x = axes_full.get_xlim()[1]
 if (overlay is not None):
