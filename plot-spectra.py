@@ -66,9 +66,10 @@ print(json.dumps(run_times,indent=1))
 
 exp_nu=0
 exp_10=0
+print(run_times)
 for p, _dict in run_times.items():
     for r, times in _dict.items():
-
+        
         if (p=="p10"):
             exp_10+=(times[1]-times[0])*times[2]/(60*60*24*365)
         elif (p in ["p03","p04","p05","p06","p07","p08"]):
@@ -76,28 +77,27 @@ for p, _dict in run_times.items():
 
 print(exp_nu)
 print(exp_10)
-path = "../build_pdf/outputs/l200a-vancouver23-dataset-v1.0.root"
+path = "../build_pdf/outputs/l200a-p34678-dataset-v1.0.root"
 
-path_all = "outputs/l200a-p10-r000-dataset-tmp-auto.root"
+path_all = "outputs/l200a-p10-r000-r001-dataset-tmp-auto.root"
 with uproot.open(path_all) as f2:
     
-    h2=utils.get_hist(f2["mul_surv/all"],(0,3000),1)
+    h2=utils.get_hist(f2["mul_surv/all"],(0,3000),5)
 
 with uproot.open(path) as f2:
     
-    h1=utils.get_hist(f2["mul_surv/all"],(0,3000),1)
+    h1=utils.get_hist(f2["mul_surv/all"],(0,3000),5)
 
 for i in range(h1.size-2):
     h1[i]*=exp_10/exp_nu
 fig, axes_full = lps.subplots(1, 1, figsize=(6,4), sharex=True)
 
-h2.plot(ax=axes_full, **style,color=vset.blue,label="p10 r000")
+h2.plot(ax=axes_full, **style,color=vset.blue,label="p10 r000/r001")
 h1.plot(ax=axes_full,**style,color=vset.orange,label="p3-8")
 axes_full.set_xlabel("Energy [keV]")
 axes_full.set_ylabel("counts/5 keV")
-axes_full.set_yscale("linear")
-axes_full.set_xlim(2600,2630)
-axes_full.set_ylim(0,10)
+axes_full.set_yscale("log")
+#axes_full.set_ylim(0,10)
 
 plt.legend(loc="upper right")
 plt.tight_layout()
