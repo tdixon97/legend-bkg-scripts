@@ -203,8 +203,9 @@ def get_data_awkard(cfg:dict,periods=None,Nmax:int=None,run_list:dict={},bad_key
                 tier = 'evt' if 'tmp-auto' in evt_path else 'pet'
                  
                 if tier == 'evt':
-                    fl_evt = glob.glob(evt_path+"/"+tier+"/phy/{}/{}/*-tier_evt.lh5".format(period,run))
 
+                    fl_evt = glob.glob(evt_path+"/"+tier+"/phy/{}/{}/*-tier_evt.lh5".format(period,run))
+                    print(evt_path+"/"+tier+"/phy/{}/{}/*-tier_evt.lh5".format(period,run))
                     ### remove the bad keys
                     fl_evt_new=[]
                     for f in fl_evt:
@@ -226,6 +227,10 @@ def get_data_awkard(cfg:dict,periods=None,Nmax:int=None,run_list:dict={},bad_key
                     f_hit = f_evt.replace(tier, "hit" if 'tmp-auto' in evt_path else 'pht')
 
                     d_evt = lh5.read_as("evt", f_evt, library="ak")
+                    if ('is_unphysical_idx_old' in d_evt["geds"].fields): 
+       
+                        d_evt["geds","is_is_unphysical_idx_new"]=d_evt["geds","is_unphysical_idx"]
+                        d_evt["geds","is_unphysical_idx"]=d_evt["geds","is_unphysical_idx_old"]
 
                     # some black magic to get TCM data corresponding to geds.hit_idx
                     tcm = ak.Array(
@@ -315,10 +320,8 @@ def get_data_awkard(cfg:dict,periods=None,Nmax:int=None,run_list:dict={},bad_key
     #            NEW QC -> is_good_hit
     #   - after: OLD QC -> is_good_hit 
     #            NEW QC -> is_good_hit_new
-    print(data["geds"].fields)
+
     if ('is_good_hit_old' in data["geds"].fields): 
-        #data = ak.rename(data["geds"], {"is_good_hit_old": "is_good_hit"}) 
-        #data = ak.rename(data["geds"], {"is_good_hit": "is_good_hit_new"}) 
         data["geds","is_good_hit_new"]=data["geds","is_good_hit"]
         data["geds","is_good_hit"]=data["geds","is_good_hit_old"]
         print(data["geds"].fields)
@@ -468,7 +471,7 @@ def main():
     out_name = f"{args.output}.root"
     periods = args.p
     process_evt = False if args.proc=="False" else True 
-
+    print(periods)
     paths_cfg={"p03":
                     {
                         "tier":"pet",
@@ -557,8 +560,7 @@ def main():
         ak.to_parquet(data,output_cache)
 
     print("Got data")
-    recompute_qc_flag=True
-
+    print(recompute_qc_flag)
 
     ### Add cuts on bad channels
     ### ---------------------------------------------------------------------
@@ -566,13 +568,26 @@ def main():
     ### FOR ON/AC -> OFF we need to modify the geds.energy geds.hit_rawid and geds.is_good_hit,
     ### to remove this hits, we then need to modify mulitplicity
     qcs_flag = "is_good_hit" if args.qc=="old" else "is_good_hit_new"
-    
+    import collections
     ### first print the data
-    data = data[ (~data.trigger.is_forced)    # no forced triggers
-                    & (~data.coincident.puls) # no pulser eventsdata
-                    & (~data.coincident.muon) ]
+    #data = data[ (~data.trigger.is_forced)    # no forced triggers
+              #      & (~data.coincident.puls) # no pulser eventsdata
+              #          & (~data.coincident.muon) ]
+
+    count = dict(collections.Counter(ak.flatten(data["geds","unphysical_hit_rawid"])))
+    sorted_map_by_keys = dict(sorted(count.items(),key=lambda item: item[1],reverse=True))
+    for c,i in sorted_map_by_keys.items():
+        print(geds_mapping[f"ch{c}"]," ",i)
+    print("\n")
     data=filter_off_ac(data,qcs_flag=qcs_flag,off_dets=usability["ac_to_off"],ac_dets=usability["ac"])
-    
+    count = dict(collections.Counter(ak.flatten(data["geds","unphysical_hit_rawid"])))
+    sorted_map_by_keys = dict(sorted(count.items(),key=lambda item: item[1],reverse=True))
+
+    for c,i in sorted_map_by_keys.items():
+   
+        print(geds_mapping[f"ch{c}"]," ",i)
+    print("\n")
+
     ### and the usual cuts
     data = data[ (~data.trigger.is_forced)    # no forced triggers
                     & (~data.coincident.puls) # no pulser eventsdata
@@ -580,7 +595,8 @@ def main():
                     & (data.geds.multiplicity > 0) # no purely lar triggered events
                    &(ak.all(data.geds[qcs_flag],axis=-1))
                     ]
-  
+    
+
 
     if (np.all(data["geds","multiplicity"]==ak.num(data["geds","energy"]))==False):
         raise ValueError("Error the multiplicity must be equal to the length of the energy array")
@@ -591,10 +607,7 @@ def main():
     if (np.all(data["geds","multiplicity"]==ak.num(data["geds",qcs_flag]))==False):
         raise ValueError("Error the multiplicity must be equal to the length of the is good hit array")
 
-    for off_det in off_dets:
-        if (np.any(ak.any(data["geds","hit_rawid"]==off_det))):
-            raise ValueError(f"Error {off_det} is still present in some hit_rawid's despite being OFF")
-
+   
     #### Now create the histograms to fill
     #### --------------------------------------------------------------------
     logger.info(f"... create the histos to fill (full period)")
