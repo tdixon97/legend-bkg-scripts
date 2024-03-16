@@ -24,6 +24,7 @@ import sys
 import re
 import json
 from legendmeta import LegendMetadata
+plt.rcParams.update({'font.size': 24}) 
 
 from matplotlib.backends.backend_pdf import PdfPages
 vset = tc.tol_cset('vibrant')
@@ -48,25 +49,42 @@ def get_hist(obj,range:tuple=(132,4195),bins:int=10):
         - hist                                                                                                                                                                                             
     """
     return obj.to_hist()[range[0]:range[1]][hist.rebin(bins)]
+
+parser = argparse.ArgumentParser(description="Script to plot the time dependence of counting rates in L200")
+parser.add_argument("--output", "-o",type=str,help="Name of output pdf file",default="test")
+parser.add_argument("--input", "-i",type=str,help="Name of input root file",default = "/data1/users/tdixon/build_pdf/outputs/l200a-p34678-dataset-v1.0.root")
+parser.add_argument("--input_p10", "-I",type=str,help="Name of input root file for p10",default ="outputs/l200a-p10-r000-r001-dataset-tmp-auto.root")
+parser.add_argument("--energy", "-e",type=str,help="Energy range to plot",default="0,4000")
+parser.add_argument("--binning", "-b",type=int,help="Binning",default=5)
+parser.add_argument("--spectrum","-s",type=str,help="Spectrum to plot",default="mul_surv")
+
+args = parser.parse_args()
+
+path =args.input_p10
+path_all = args.input
+output =args.output
+binning=args.binning
+spectrum =args.spectrum
+energy=args.energy
+
+energy_low = int(energy.split(",")[0])
+energy_high = int(energy.split(",")[1])
+os.makedirs("plots",exist_ok=True)
+
+
 metadb = LegendMetadata("/data2/public/prodenv/prod-blind/tmp-auto/inputs")
 usability_path = "/data1/users/tdixon/legend-bkg-scripts/cfg/usability_changes.json"
 
 chmap = metadb.channelmap(datetime.now())
 runs=metadb.dataprod.config.analysis_runs
-#runs['p10']=['r000']
 runs['p10']=['r000','r001']
-with Path(usability_path).open() as f:
-    usability = json.load(f)
-off_list = usability["ac_to_off"]
-ac_list=usability["ac"]
-run_times=utils.get_run_times(metadb,runs,verbose=1,ac=ac_list,off=off_list)
-print(json.dumps(run_times,indent=1))
+
+run_times=utils.get_run_times(metadb,runs,verbose=1)
 
 ## get exposure
 
 exp_nu=0
 exp_10=0
-print(run_times)
 for p, _dict in run_times.items():
     for r, times in _dict.items():
         
@@ -75,31 +93,27 @@ for p, _dict in run_times.items():
         elif (p in ["p03","p04","p05","p06","p07","p08"]):
             exp_nu+=(times[1]-times[0])*times[2]/(60*60*24*365)
 
-print(exp_nu)
-print(exp_10)
-path = "../build_pdf/outputs/l200a-p34678-dataset-v1.0.root"
 
-path_all = "outputs/l200a-p10-r000-r001-dataset-tmp-auto.root"
+
 with uproot.open(path_all) as f2:
     
-    h2=utils.get_hist(f2["mul_surv/all"],(0,3000),5)
+    h1=utils.get_hist(f2[f"{spectrum}/all"],(energy_low,energy_high),binning)
 
 with uproot.open(path) as f2:
     
-    h1=utils.get_hist(f2["mul_surv/all"],(0,3000),5)
+    h2=utils.get_hist(f2[f"{spectrum}/all"],(energy_low,energy_high),binning)
 
 for i in range(h1.size-2):
     h1[i]*=exp_10/exp_nu
-fig, axes_full = lps.subplots(1, 1, figsize=(6,4), sharex=True)
+fig, axes_full = lps.subplots(1, 1, figsize=(5,4), sharex=True)
 
 h2.plot(ax=axes_full, **style,color=vset.blue,label="p10 r000/r001")
 h1.plot(ax=axes_full,**style,color=vset.orange,label="p3-8")
 axes_full.set_xlabel("Energy [keV]")
-axes_full.set_ylabel("counts/5 keV")
+axes_full.set_ylabel(f"counts/{binning} keV")
 axes_full.set_yscale("log")
-#axes_full.set_ylim(0,10)
 
 plt.legend(loc="upper right")
 plt.tight_layout()
-plt.savefig("test.pdf")
+plt.savefig("plots/"+output+".pdf")
 
