@@ -32,12 +32,12 @@ It can be run fom inside the LEGEND container at LNGS (can also be run locally w
     python plot-spectra.py -o <OUTPUT PDF> -i <INPUT> -I <INPUT_P10> -e <ENERGY> -b <BINNING> -s <SPECTRUM>
 
 Where:
-*`<OUTPUT PDF>` is the name of the pdf file to save the plot (in the `plots` directory)
-*`<INPUT>`: is the root file for the vancouver dataset for comparison (default `/data1/users/tdixon/build_pdf/outputs/l200a-p34678-dataset-v1.0.root`)
-*`<INPUT P10>`: Is the root file for period 10
-*`<ENERGY>` : is the energy range to plot (comma seperated eg 0,4000)
-*`<BINNING>` is the binning
-*`<SPECTRUM>` is the spectrum to plot, default `mul_surv` could also be `mul_lar_surv` etc (look in the root files)
+* `<OUTPUT PDF>` is the name of the pdf file to save the plot (in the `plots` directory)
+* `<INPUT>`: is the root file for the vancouver dataset for comparison (default `/data1/users/tdixon/build_pdf/outputs/l200a-p34678-dataset-v1.0.root`)
+* `<INPUT P10>`: Is the root file for period 10
+* `<ENERGY>` : is the energy range to plot (comma seperated eg 0,4000)
+* `<BINNING>` is the binning
+* `<SPECTRUM>` is the spectrum to plot, default `mul_surv` could also be `mul_lar_surv` etc (look in the root files)
 
 `time-analysis.py` plots the rate of events in a certain energy window, it can also be run in the LNGS container:
 
