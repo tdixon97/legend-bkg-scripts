@@ -107,7 +107,9 @@ with uproot.open(path) as f2:
     h2=utils.get_hist(f2[f"{spectrum}/{dataset}"],(energy_low,energy_high),binning)
 
 for i in range(h1.size-2):
-    h1[i]*=exp_10/exp_nu
+    h1[i]/=exp_nu
+for i in range(h2.size-2):
+    h2[i]/=exp_10
 fig, axes_full = lps.subplots(1, 1, figsize=(7,5), sharex=True)
 
 h2.plot(ax=axes_full, **style,color=vset.blue,label=f"p10 {runs['p10']}")
