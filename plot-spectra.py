@@ -2,9 +2,9 @@
 plot-spectra.py
 Author: Toby Dixon (toby.dixon.23@ucl.ac.uk) 
 """
-import shutil
 from legend_plot_style import LEGENDPlotStyle as lps
 lps.use('legend')
+import shutil
 import subprocess
 from collections import OrderedDict
 import uproot
@@ -57,6 +57,7 @@ parser.add_argument("--input_p10", "-I",type=str,help="Name of input root file f
 parser.add_argument("--energy", "-e",type=str,help="Energy range to plot",default="0,4000")
 parser.add_argument("--binning", "-b",type=int,help="Binning",default=5)
 parser.add_argument("--spectrum","-s",type=str,help="Spectrum to plot",default="mul_surv")
+parser.add_argument("--dataset","-d",type=str,help="Which group of detectors to plot",default="all")
 
 args = parser.parse_args()
 
@@ -66,6 +67,7 @@ output =args.output
 binning=args.binning
 spectrum =args.spectrum
 energy=args.energy
+dataset=args.dataset
 
 energy_low = int(energy.split(",")[0])
 energy_high = int(energy.split(",")[1])
@@ -73,7 +75,7 @@ os.makedirs("plots",exist_ok=True)
 
 
 metadb = LegendMetadata("/data2/public/prodenv/prod-blind/tmp-auto/inputs")
-usability_path = "/data1/users/tdixon/legend-bkg-scripts/cfg/usability_changes.json"
+#usability_path = "/data1/users/tdixon/legend-bkg-scripts/cfg/usability_changes.json" #not used
 
 chmap = metadb.channelmap(datetime.now())
 runs=metadb.dataprod.config.analysis_runs
@@ -92,26 +94,30 @@ for p, _dict in run_times.items():
             exp_10+=(times[1]-times[0])*times[2]/(60*60*24*365)
         elif (p in ["p03","p04","p05","p06","p07","p08"]):
             exp_nu+=(times[1]-times[0])*times[2]/(60*60*24*365)
-
+print("Total exposure in p10:", exp_10, "kg-yr")
+print("Total exposure in other periods:", exp_nu, "kg-yr")
 
 
 with uproot.open(path_all) as f2:
     
-    h1=utils.get_hist(f2[f"{spectrum}/all"],(energy_low,energy_high),binning)
+    h1=utils.get_hist(f2[f"{spectrum}/{dataset}"],(energy_low,energy_high),binning)
 
 with uproot.open(path) as f2:
     
-    h2=utils.get_hist(f2[f"{spectrum}/all"],(energy_low,energy_high),binning)
+    h2=utils.get_hist(f2[f"{spectrum}/{dataset}"],(energy_low,energy_high),binning)
 
 for i in range(h1.size-2):
-    h1[i]*=exp_10/exp_nu
-fig, axes_full = lps.subplots(1, 1, figsize=(5,4), sharex=True)
+    h1[i]/=exp_nu
+for i in range(h2.size-2):
+    h2[i]/=exp_10
+fig, axes_full = lps.subplots(1, 1, figsize=(7,5), sharex=True)
 
-h2.plot(ax=axes_full, **style,color=vset.blue,label="p10 r000/r001")
+h2.plot(ax=axes_full, **style,color=vset.blue,label=f"p10 {runs['p10']}")
 h1.plot(ax=axes_full,**style,color=vset.orange,label="p3-8")
 axes_full.set_xlabel("Energy [keV]")
-axes_full.set_ylabel(f"counts/{binning} keV")
+axes_full.set_ylabel(f"counts/({binning} keV kg yr)")
 axes_full.set_yscale("log")
+axes_full.set_title(f"{spectrum} - {dataset}")
 
 plt.legend(loc="upper right")
 plt.tight_layout()
