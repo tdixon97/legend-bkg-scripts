@@ -225,7 +225,7 @@ def get_data_awkard(cfg:dict,periods=None,target_key=None,Nmax:int=None,run_list
                     len_before = len(fl_evt)
                     fl_evt = [f for f in fl_evt if datetime.strptime(f.split('-')[-2], "%Y%m%dT%H%M%SZ") <=  datetime.strptime(target_key, "%Y%m%dT%H%M%SZ")]
                     len_after = len(fl_evt)
-                    if len_before != len_after:
+                    if len_before > len_after:
                         print("you removed", len_after-len_before, "files in", period, run)
 
                 ## loop
@@ -295,8 +295,11 @@ def get_data_awkard(cfg:dict,periods=None,target_key=None,Nmax:int=None,run_list
                     d_evt["geds", "hit_rawid"] = tcm.id
                     d_evt["geds", "energy"] = energy
                  
-
-                    ch = metadb.channelmap(metadb.dataprod.runinfo[period][run]["phy"]["start_key"])
+                    if period!="p10" and run!="r003":
+                        ch = metadb.channelmap(metadb.dataprod.runinfo[period][run]["phy"]["start_key"])
+                    else:
+                        start = json.load(open('/data1/users/calgaro/legend-metadata/dataprod/runinfo.json'))[period][run]["phy"]["start_key"]
+                        ch = metadb.channelmap(start)
                     ac = [ _dict["daq"]["rawid"] for _name, _dict in ch.items() if ch[_name]["system"] == "geds" and ch[_name]["analysis"]["usability"] in ["ac"]]
                     off= [ _dict["daq"]["rawid"] for _name, _dict in ch.items() if ch[_name]["system"] == "geds" and ch[_name]["analysis"]["usability"] in ["off"]]
 
