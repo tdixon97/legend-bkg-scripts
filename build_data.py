@@ -165,7 +165,7 @@ def cross_talk_corrected_energies(energies:np.ndarray,channels:np.ndarray,cross_
     else:
         raise ValueError("Error: In the current skm files we should never have >2 energies")
 
-def get_data_awkard(cfg:dict,periods=None,Nmax:int=None,run_list:dict={},bad_keys=[],metadb=LegendMetadata()):
+def get_data_awkard(cfg:dict,periods=None,target_key=None,Nmax:int=None,run_list:dict={},bad_keys=[],metadb=LegendMetadata()):
     """
     A function to load the evt tier data into an awkard array also getting the energies
     Parameters
@@ -210,7 +210,7 @@ def get_data_awkard(cfg:dict,periods=None,Nmax:int=None,run_list:dict={},bad_key
                     fl_evt_new=[]
                     for f in fl_evt:
                         if not any(key in f for key in bad_keys):
-                            fl_evt_new.append(f)
+                            fl_evt_new.append(f) 
 
                     fl_evt = fl_evt_new
 
@@ -219,6 +219,14 @@ def get_data_awkard(cfg:dict,periods=None,Nmax:int=None,run_list:dict={},bad_key
                     for f in fl_evt:
                         if any(key in f for key in bad_keys):
                             raise ValueError(f"Error the key {f} is present in the data but shouldnt be" )
+
+                # filter out files based on target key (if present)
+                if target_key is not None:
+                    len_before = len(fl_evt)
+                    fl_evt = [f for f in fl_evt if datetime.strptime(f.split('-')[-2], "%Y%m%dT%H%M%SZ") <=  datetime.strptime(target_key, "%Y%m%dT%H%M%SZ")]
+                    len_after = len(fl_evt)
+                    if len_before != len_after:
+                        print("you removed", len_after-len_before, "files in", period, run)
 
                 ## loop
                 for f_evt in fl_evt:
@@ -348,7 +356,6 @@ def filter_off_ac(data,qcs_flag="is_good_hit",ac_dets=[],off_dets=[],verbose=Fal
     }
 
     """
-    
     data["geds","on_multiplicity"]=ak.sum(data.geds[qcs_flag], axis=-1)
 
     if (verbose):
@@ -454,13 +461,15 @@ def main():
     parser.add_argument("--proc", help="Boolean flag: True if you want to load from the pet/evt tier; if False and the parquet already exists, then we directly load data from this")
     parser.add_argument("--qc", default="old", help="Set to 'new' if you want to apply new cuts (post Vancouver CM), otherwise default value is set to 'old' cuts")
     parser.add_argument("--recompute", default=False, help="Boolean flag set to True if you want to recompute the QC flag after setting OFF detectors")
+    parser.add_argument("--target", default=None, help="Target cycle up to which include data; use format '20240317T141137Z.")
 
     args = parser.parse_args()
-    usability_path = "/data1/users/tdixon/legend-bkg-scripts/cfg/usability_changes.json"
+    usability_path = "cfg/usability_changes.json"
     config_path = "/data1/users/tdixon/build_pdf/legend-simflow-config/tier/pdf/l200a/build-pdf-config.json"
     xtc_folder = "/data1/users/tdixon/build_pdf/cross_talk"
     bad_keys_path = "/data1/users/calgaro/legend-dataflow-config/ignore_keys.keylist"
-    recompute_qc_flag =args.recompute
+    recompute_qc_flag = args.recompute
+    target_key = args.target
 
     ## read bad-keys
     bad_list=[]
@@ -546,8 +555,7 @@ def main():
 
     # analysis runs
     runs=metadb.dataprod.config.analysis_runs
-    runs['p10']=['r000','r001']
-    ## times of each run
+    runs['p10']=['r000','r001','r002','r003']
 
     os.makedirs("outputs",exist_ok=True)
     output_cache = f"outputs/{out_name.replace('.root', '.parquet')}"
@@ -556,7 +564,7 @@ def main():
         logger.info("Get from parquet")
         data =ak.from_parquet(output_cache)
     else:
-        data=get_data_awkard(cfg=paths_cfg,periods=periods,Nmax=None,run_list=runs,bad_keys=bad_list,metadb=metadb)
+        data=get_data_awkard(cfg=paths_cfg,periods=periods,target_key=target_key,Nmax=None,run_list=runs,bad_keys=bad_list,metadb=metadb)
         ak.to_parquet(data,output_cache)
 
     print("Got data")
@@ -584,7 +592,6 @@ def main():
     sorted_map_by_keys = dict(sorted(count.items(),key=lambda item: item[1],reverse=True))
 
     for c,i in sorted_map_by_keys.items():
-   
         print(geds_mapping[f"ch{c}"]," ",i)
     print("\n")
 
