@@ -295,7 +295,7 @@ def get_data_awkard(cfg:dict,periods=None,target_key=None,Nmax:int=None,run_list
                     d_evt["geds", "hit_rawid"] = tcm.id
                     d_evt["geds", "energy"] = energy
                  
-                    if period!="p10" and run!="r003":
+                    if run in metadb.dataprod.runinfo[period].keys():
                         ch = metadb.channelmap(metadb.dataprod.runinfo[period][run]["phy"]["start_key"])
                     else:
                         start = json.load(open('/data1/users/calgaro/legend-metadata/dataprod/runinfo.json'))[period][run]["phy"]["start_key"]
