@@ -228,10 +228,11 @@ def sideband_counting(hist,low,center_low,center_high,high,pdf=None,name=""):
         plt.legend(loc="best",frameon=True,facecolor="white")
 
         pdf.savefig()
-        plt.close(fig)
+        plt.close("all")
 
         hist_fit =copy.deepcopy(hist)
         bw =np.diff(hist.axes.centers[0])[0]
+        maxi=0
         for i in range(hist.size-2):
             xt= hist.axes.centers[0][i]
 
@@ -246,17 +247,20 @@ def sideband_counting(hist,low,center_low,center_high,high,pdf=None,name=""):
             else:
                 hist_fit[i]=0
 
+            if (xt>low and xt<high and hist[i]>maxi):
+                maxi=hist[i]
+
         fig, axes = lps.subplots(1, 1, figsize=(3,3), sharex=True, gridspec_kw = {'hspace': 0})
         hist.plot(ax=axes,**style,histtype="fill",alpha=0.5,label="Data")
         hist_fit.plot(ax=axes,**style,color="black",alpha=0.5,label="Fit")
 
         axes.set_title(name)
         axes.set_xlim(low-5,high+5)
-        axes.set_ylim(0,best_fit[0]*2+best_fit[1])
+        axes.set_ylim(0,maxi+5)
         axes.set_xlabel("Energy [keV]")
         axes.legend(loc="best")
         pdf.savefig()
-        plt.close(fig)
+        plt.close("all")
     
     return x[np.argmax(w_x)],get_smallest_ci(x[np.argmax(w_x)],x,w_x)
 
