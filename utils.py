@@ -75,7 +75,7 @@ def normalise_histo(hist,factor=1):
         hist[i]*=factor
 
     return hist
-    
+
 def get_run_times(metadb:LegendMetadata,analysis_runs:dict,verbose:bool=True,ac=[],off=[])->dict:
     """ Get the livetime from the metadata
     Parameters:
@@ -173,7 +173,7 @@ def get_error_bar(N:float):
     return get_smallest_ci(N,x,y)
 
 
-def get_hist(obj,range:tuple=(132,4195),bins:int=10):
+def get_hist(obj,range:tuple=(132,4195),bins:int=10,variable=None):
     """                                                                                                                                                                                                    
     Extract the histogram (hist package object) from the uproot histogram                                                                                                                                  
     Parameters:                                                                                                                                                                                            
@@ -183,8 +183,17 @@ def get_hist(obj,range:tuple=(132,4195),bins:int=10):
     Returns:                                                                                                                                                                                               
         - hist                                                                                                                                                                                             
     """
-    return obj.to_hist()[range[0]:range[1]][hist.rebin(bins)]
+   
+        
+    h=obj.to_hist()[range[0]:range[1]]
 
+    if (variable is not None):
+        h=normalise_histo(variable_rebin(h,variable))
+    
+    else:
+        h=h[hist.rebin(bins)]
+    return h
+    
 
 def normalise_histo(hist,factor=1):
     """ Normalise a histogram into units of counts/keV"""
