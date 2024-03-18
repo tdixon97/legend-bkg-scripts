@@ -433,7 +433,7 @@ if (subtract):
 
     fig, axes_full = lps.subplots(1, 1, figsize=(4,3), sharex=True)
 
-    histo_div.plot(ax=axes_full,**style,color=vset.blue,histtype="fill")
+    histo_div.plot(ax=axes_full,**style,color=vset.blue,histtype="fill",alpha=0.4)
 
     axes_full.set_xlabel("rate (p10)/rate (p3-p8)")
 
