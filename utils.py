@@ -265,7 +265,7 @@ def sideband_counting(hist,low,center_low,center_high,high,pdf=None,name=""):
         pdf.savefig()
         plt.close("all")
     
-    return x[np.argmax(w_x)],get_smallest_ci(x[np.argmax(w_x)],x,w_x)
+    return x[np.argmax(w_x)],get_smallest_ci(x[np.argmax(w_x)],x,w_x)[0],get_smallest_ci(x[np.argmax(w_x)],x,w_x)[1]
 
 
 
