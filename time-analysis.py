@@ -155,8 +155,7 @@ if (include_p10):
                     
 counts={}
 counts_p10={}
-total_counts=0
-total_counts_p10=0
+
 
 if subtract:
     pdf = PdfPages("outputs/"+out_name[0:-5]+"_counting_analysis.pdf")
@@ -179,9 +178,10 @@ for period in periods:
                 c_tmp=utils.integrate_hist(hists[period][run],energy_low,energy_high)
                 counts[period][run]=(c_tmp,utils.get_error_bar(c_tmp)[0],utils.get_error_bar(c_tmp)[1])
             else:
-                counts[period][run]=utils.sideband_counting(hists[period][run],energy_low-15,
+                counts[period][run],_=utils.sideband_counting(hists[period][run],energy_low-15,
                             energy_low,energy_high,energy_high+15,pdf,f" {energy_low} to {energy_high} keV {period}-{run}")
 
+               
 
         if include_p10:
             if run in hists_p10[period].keys():
@@ -189,7 +189,7 @@ for period in periods:
                     c_tmp=utils.integrate_hist(hists_p10[period][run],energy_low,energy_high)
                     counts_p10[period][run]=(c_tmp,utils.get_error_bar(c_tmp)[0],utils.get_error_bar(c_tmp)[1])
                 else:
-                    counts_p10[period][run]=utils.sideband_counting(hists_p10[period][run],energy_low-15,
+                    counts_p10[period][run],_=utils.sideband_counting(hists_p10[period][run],energy_low-15,
                             energy_low,energy_high,energy_high+15,pdf,f" {energy_low} to {energy_high} keV {period}-{run}")
 
 
@@ -203,10 +203,11 @@ if (subtract==False):
     counts_total_p10=(c_tmp,utils.get_error_bar(c_tmp)[0],utils.get_error_bar(c_tmp)[1])
 
 else:
-    counts_total_p10=utils.sideband_counting(hist_tot_p10,energy_low-15,
+    counts_total_p10,posterior_p10=utils.sideband_counting(hist_tot_p10,energy_low-15,
                             energy_low,energy_high,energy_high+15,pdf,f" {energy_low} to {energy_high} keV p10-TOTAL")
-    counts_total=utils.sideband_counting(hist_tot,energy_low-15,
+    counts_total,posterior=utils.sideband_counting(hist_tot,energy_low-15,
                             energy_low,energy_high,energy_high+15,pdf,f" {energy_low} to {energy_high} keV p3-p8-TOTAL")
+
 
 if (subtract):
     pdf.close()
@@ -291,6 +292,8 @@ if (include_p10):
         histo_time_plot_p10=utils.normalise_histo(histo_time_p10)
     else:
         histo_time_plot_p10=copy.deepcopy(histo_time_p10)
+
+
 
 
 
@@ -394,3 +397,47 @@ if overlay is not None:
     plt.legend(loc="best")
 
 plt.savefig("outputs/"+out_name[0:-5]+".pdf")
+
+
+
+
+## make some posterior plots / extract some numbers
+### ------------------------------------------------
+if (subtract):
+    counts_samples = utils.sample_hist(posterior,N=int(1e6))
+    counts_p10_samples = utils.sample_hist(posterior_p10,N=int(1e6))
+
+    rates = counts_samples/total_exposure
+    rates_p10 = counts_p10_samples/total_exposure_p10
+
+    div = rates_p10/rates
+
+    histo_div = ( Hist.new.Reg(200, 0,1.2).Double())
+    histo = ( Hist.new.Reg(200, 0, max(max(rates),max(rates_p10))).Double())
+
+    histo_p10 = ( Hist.new.Reg(200, 0, max(max(rates),max(rates_p10))).Double())
+
+    histo.fill(rates)
+    histo_p10.fill(rates_p10)
+    histo_div.fill(div)
+    fig, axes_full = lps.subplots(1, 1, figsize=(4,3), sharex=True)
+
+    histo.plot(ax=axes_full,**style,histtype="fill",alpha=0.4,color=vset.blue,label="With OB")
+    histo_p10.plot(ax=axes_full,**style,histtype="fill",alpha=0.4,color=vset.orange,label="No OB")
+
+    axes_full.set_xlabel("counts/kg/day")
+    axes_full.set_ylabel("Prob [arb]")
+    axes_full.legend(loc="best")
+    axes_full.set_title(f"{int(energy_low)}, {int(energy_high)} keV")
+    
+    plt.savefig("outputs/"+out_name[0:-5]+"_posterior.pdf")
+
+    fig, axes_full = lps.subplots(1, 1, figsize=(4,3), sharex=True)
+
+    histo_div.plot(ax=axes_full,**style,color=vset.blue)
+
+    axes_full.set_xlabel("rate (p10)/rate (p3-p8)")
+
+    plt.savefig("outputs/"+out_name[0:-5]+"_ratio_posterior.pdf")
+
+
