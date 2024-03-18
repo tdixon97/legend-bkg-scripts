@@ -265,8 +265,25 @@ def sideband_counting(hist,low,center_low,center_high,high,pdf=None,name=""):
         pdf.savefig()
         plt.close("all")
     
-    return x[np.argmax(w_x)],get_smallest_ci(x[np.argmax(w_x)],x,w_x)[0],get_smallest_ci(x[np.argmax(w_x)],x,w_x)[1]
+    return (x[np.argmax(w_x)],get_smallest_ci(x[np.argmax(w_x)],x,w_x)[0],get_smallest_ci(x[np.argmax(w_x)],x,w_x)[1]),histo_x
 
 
 
+def sample_hist(hist,N):
+    """
+    Generate samples from a histogram
+    """
 
+    edges = hist.axes[0].edges
+    int = sum(hist.values())
+
+    counts = hist.view()
+
+    bin_widths = np.diff(edges)
+    probabilities = counts / np.sum(counts )
+
+    sample_indices = np.random.choice(range(len(edges) - 1), size=N, p=probabilities)
+
+    sampled_values = np.random.uniform(edges[sample_indices], edges[sample_indices + 1])
+    
+    return sampled_values
