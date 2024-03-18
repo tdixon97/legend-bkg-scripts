@@ -51,6 +51,7 @@ parser.add_argument("--energy", "-e",type=str,help="comma seperate energy range"
 parser.add_argument("--plot_hist","-p",type=bool,help="Boolean flag to plot data as histogram ")
 parser.add_argument("--spectrum","-s",type=str,help="Spectrum to fit",default="mul_surv")
 parser.add_argument("--BAT_overlay","-B",type=str,help="Overlay the BAT fit? argument is the directory with BAT fit results",default=None)
+parser.add_argument("--average","-a",type=bool,help="Boolean flag to show the average rate over the plot",default=False)
 
 args = parser.parse_args()
 output =args.output
@@ -59,6 +60,7 @@ input_p10 =args.input_p10
 plot_hist =bool(args.plot_hist)
 spectrum =args.spectrum
 overlay = args.BAT_overlay
+average= args.average
 
 include_p10=True
 
@@ -75,14 +77,14 @@ energy_high = float(energy.split(",")[1])
 ### ----------------------
 
 
-metadb = LegendMetadata("/data2/public/prodenv/prod-blind/tmp-auto/inputs/")
+metadb = LegendMetadata("/data2/public/prodenv/prod-blind/tmp-auto/inputs")
 
 chmap = metadb.channelmap(datetime.now())
 runs=metadb.dataprod.config.analysis_runs
 
 ## hardcoded for now
 if (include_p10):
-    runs["p10"]=["r000","r001"]
+    runs["p10"]=["r000","r001","r002","r003"]
 
 run_times=utils.get_run_times(metadb,runs,verbose=1)
 
@@ -141,7 +143,8 @@ if (include_p10):
                     
 counts={}
 counts_p10={}
-
+total_counts=0
+total_counts_p10=0
 
 for period in periods:
     run_list=runs[period]
@@ -154,11 +157,12 @@ for period in periods:
     for run in run_list:
         if run in hists[period].keys():
             counts[period][run]=utils.integrate_hist(hists[period][run],energy_low,energy_high)
+            total_counts+=counts[period][run]
 
         if include_p10:
             if run in hists_p10[period].keys():
                 counts_p10[period][run]=utils.integrate_hist(hists_p10[period][run],energy_low,energy_high)
-
+                total_counts_p10+=counts_p10[period][run]
 
 ### fill the histograms
 ### -------------------------------------------------
@@ -170,6 +174,8 @@ if (include_p10):
     histo_time_p10 =( Hist.new.Variable(bins).Double())
     histo_mass_p10 =( Hist.new.Variable(bins).Double())
 
+total_exposure=0
+total_exposure_p10=0
 
 for period in periods:
     run_list=runs[period]
@@ -181,9 +187,11 @@ for period in periods:
         if (period!="p10"):
             histo_mass[(tstart/60/60/24+tstop/60/60/24)*0.5j]=mass
             histo_time[(tstart/60/60/24+tstop/60/60/24)*0.5j]=counts[period][run]
+            total_exposure+=(tstop/60/60/24-tstart/60/60/24)*mass
         elif (include_p10):
             histo_mass_p10[(tstart/60/60/24+tstop/60/60/24)*0.5j]=mass
             histo_time_p10[(tstart/60/60/24+tstop/60/60/24)*0.5j]=counts_p10[period][run]
+            total_exposure_p10+=(tstop/60/60/24-tstart/60/60/24)*mass
 
 
 ### save the time-histo (for fitting)
@@ -239,6 +247,7 @@ for i in range(histo_mass.size-2):
     else:
         histo_time_plot[i]=0
 
+
 if (include_p10):
     for i in range(histo_mass_p10.size-2):
         if (histo_mass_p10[i]>0 and widths[i]>1):
@@ -262,7 +271,7 @@ if (include_p10):
 fig, axes_full = lps.subplots(1, 1, figsize=(4,3), sharex=True)
 
 if (plot_hist):
-    histo_time_plot.plot(ax=axes_full,**style,color=vset.blue,histtype="fill",alpha=0.5,label="WIth OB")
+    histo_time_plot.plot(ax=axes_full,**style,color=vset.blue,histtype="fill",alpha=0.5,label="With OB")
     if (include_p10):
         histo_time_plot_p10.plot(ax=axes_full,**style,color=vset.orange,histtype="fill",alpha=0.5,label="NO OB")
 
@@ -276,6 +285,29 @@ axes_full.set_ylabel("Counts / kg -day")
 if (include_p10):
     axes_full.legend(loc="upper left")
 axes_full.set_title(f"{int(energy_low)}, {int(energy_high)} keV")
+
+end_p8 = x[-1]
+start_p10=x_p10[0]
+end_p10 =x_p10[-1]
+axes_full.set_xlim(-2,end_p10+20)
+middle = (start_p10+end_p8)/2
+max_x = axes_full.get_xlim()[1]
+### overlay average band
+if (average==True):
+    c_tot_low,c_tot_high=utils.get_error_bar(total_counts)
+
+    low_rate = (total_counts-c_tot_low)/total_exposure
+    high_rate = (total_counts+c_tot_high)/total_exposure
+
+    axes_full.axhspan(low_rate,high_rate,xmin=0,xmax=(middle)/max_x ,color=vset.blue, alpha=0.5)
+
+    if include_p10:
+        c_tot_low_p10,c_tot_high_p10=utils.get_error_bar(total_counts_p10)
+        low_rate_p10 = (total_counts_p10-c_tot_low_p10)/total_exposure_p10
+        high_rate_p10 = (total_counts_p10+c_tot_high_p10)/total_exposure_p10
+
+        axes_full.axhspan(low_rate_p10,high_rate_p10,xmin=(middle)/max_x,xmax=(end_p10+10)/max_x, color=vset.orange, alpha=0.5)
+
 #### overlay BAT fit results
 range_x = axes_full.get_xlim()[1]
 if (overlay is not None):
@@ -295,6 +327,6 @@ if overlay is not None:
     N = expo(t,df_res["glob_mode"][0],df_res["glob_mode"][1],df_res['glob_mode'][2])
 
     plt.plot(t,N,label="Global mode")
-    plt.legend(loc="upper right")
+    plt.legend(loc="best")
 print(out_name[0:-5])
 plt.savefig("outputs/"+out_name[0:-5]+".pdf")
