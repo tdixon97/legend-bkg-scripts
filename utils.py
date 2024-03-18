@@ -20,6 +20,62 @@ import hist
 from datetime import datetime
 from scipy.stats import poisson
 
+def string_to_edges(input_string):
+    
+    segments = input_string.split(',')
+    result = []
+
+    for segment in segments:
+        start, value, end = segment.split(':')
+        start=float(start)
+        value=float(value)
+        end=float(end)
+        
+        while start<=end:
+            result.append(start)
+            start+=value
+        
+    return result
+
+def variable_rebin(histo,edges:list):
+    """ 
+    Perform a variable rebinning of a hist object
+    Parameters:
+        - histo: The histogram object
+        - edges: The list of the bin edges
+    Returns:
+        - variable rebin histo    
+    """
+    histo_var =( Hist.new.Variable(edges).Double())
+    for i in range(histo.size-2):
+        cent = histo.axes.centers[0][i]
+    
+        histo_var[cent*1j]+=histo.values()[i]
+
+    return histo_var
+
+
+def normalise_histo(hist,factor=1):
+    """ 
+    Normalise a histogram into units of counts/keV (by bin width)
+     Parameters:
+    ----------------------
+        - histo: Hist object
+        - factor: a scaling factor to multiply the histo by
+    Returns
+    ----------------------
+        - normalised histo
+    """
+
+
+    widths= np.diff(hist.axes.edges[0])
+
+    for i in range(hist.size-2):
+        hist[i]/=widths[i]
+        hist[i]*=factor
+
+    return hist
+    
 def get_run_times(metadb:LegendMetadata,analysis_runs:dict,verbose:bool=True,ac=[],off=[])->dict:
     """ Get the livetime from the metadata
     Parameters:
