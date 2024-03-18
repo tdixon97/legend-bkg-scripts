@@ -412,9 +412,8 @@ if (subtract):
 
     div = rates_p10/rates
 
-    histo_div = ( Hist.new.Reg(200, 0,1.2).Double())
+    histo_div = ( Hist.new.Reg(200, 0,1.5).Double())
     histo = ( Hist.new.Reg(200, 0, max(max(rates),max(rates_p10))).Double())
-
     histo_p10 = ( Hist.new.Reg(200, 0, max(max(rates),max(rates_p10))).Double())
 
     histo.fill(rates)
@@ -434,10 +433,28 @@ if (subtract):
 
     fig, axes_full = lps.subplots(1, 1, figsize=(4,3), sharex=True)
 
-    histo_div.plot(ax=axes_full,**style,color=vset.blue)
+    histo_div.plot(ax=axes_full,**style,color=vset.blue,histtype="fill")
 
     axes_full.set_xlabel("rate (p10)/rate (p3-p8)")
 
     plt.savefig("outputs/"+out_name[0:-5]+"_ratio_posterior.pdf")
+
+    ## now the summary stats
+    w,x=histo.to_numpy()
+    w_p10,x_p10=histo_p10.to_numpy()
+    w_div,x_div=histo_div.to_numpy()
+
+    best_fit = x[np.argmax(w)]
+    best_fit_p10=x_p10[np.argmax(w_p10)]
+    best_div =x_div[np.argmax(w_div)]
+
+    errors = utils.get_smallest_ci(best_fit,x,w)
+    errors_p10 = utils.get_smallest_ci(best_fit_p10,x_p10,w_p10)
+    errors_div = utils.get_smallest_ci(best_div,x_div,w_div)
+
+    print(f"For p3-8 rate  = {best_fit:.2g} + {errors[1]:.2g} - {errors[0]:.2g} cts/kg/yr")
+    print(f"For p10 rate   = {best_fit_p10:.2g} + {errors_p10[1]:.2g} - {errors_p10[0]:.2g} cts/kg/day")
+    print(f"p10/p3-8       = {best_div:.2g} + {errors_div[1]:.2g} - {errors_div[0]:.2g}")
+
 
 
