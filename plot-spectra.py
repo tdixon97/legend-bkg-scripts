@@ -3,7 +3,7 @@ plot-spectra.py
 Author: Toby Dixon (toby.dixon.23@ucl.ac.uk) 
 """
 from legend_plot_style import LEGENDPlotStyle as lps
-lps.use('legend')
+lps.use('legend_talks')
 import shutil
 import subprocess
 from collections import OrderedDict
@@ -59,6 +59,7 @@ parser.add_argument("--binning", "-b",type=int,help="Binning",default=5)
 parser.add_argument("--spectrum","-s",type=str,help="Spectrum to plot",default="mul_surv")
 parser.add_argument("--dataset","-d",type=str,help="Which group of detectors to plot",default="all")
 parser.add_argument("--variable","-V",type=str,help="Variable binning, argument is the path to the cfg file defualt 'None' and flat binning is used",default=None)
+parser.add_argument("--scale","-S",type=str,help="scale to use, default 'log'",default="log")
 
 args = parser.parse_args()
 
@@ -67,6 +68,7 @@ path_all = args.input
 output =args.output
 binning=args.binning
 spectrum =args.spectrum
+scale=args.scale
 energy=args.energy
 dataset=args.dataset
 variable = args.variable
@@ -128,7 +130,7 @@ if (variable is None):
 else:
     axes_full.set_ylabel(f"counts/(keV kg yr)")
 
-axes_full.set_yscale("linear")
+axes_full.set_yscale(scale)
 axes_full.set_title(f"{spectrum} - {dataset}")
 axes_full.set_xlim(energy_low,energy_high)
 plt.legend(loc="upper right")
