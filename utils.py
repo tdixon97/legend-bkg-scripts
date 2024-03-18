@@ -236,14 +236,17 @@ def sideband_counting(hist,low,center_low,center_high,high,pdf=None,name=""):
         for i in range(hist.size-2):
             xt= hist.axes.centers[0][i]
 
+            B1 = best_fit[1]*w1/w2
+            B3 = best_fit[1]*w3/w2
+
             if (xt<low):
                 hist_fit[i]=0
             elif(xt<center_low):
-                hist_fit[i]=bw*best_fit[1]/w1
+                hist_fit[i]=bw*B1/w1
             elif (xt<center_high):
                 hist_fit[i]=bw*(best_fit[1]+best_fit[0])/w2
             elif (xt<high):
-                hist_fit[i]=bw*best_fit[1]/w3
+                hist_fit[i]=bw*B3/w3
             else:
                 hist_fit[i]=0
 
