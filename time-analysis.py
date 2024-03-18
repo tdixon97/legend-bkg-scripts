@@ -452,9 +452,9 @@ if (subtract):
     errors_p10 = utils.get_smallest_ci(best_fit_p10,x_p10,w_p10)
     errors_div = utils.get_smallest_ci(best_div,x_div,w_div)
 
-    print(f"For p3-8 rate  = {best_fit:.2g} + {errors[1]:.2g} - {errors[0]:.2g} cts/kg/yr")
-    print(f"For p10 rate   = {best_fit_p10:.2g} + {errors_p10[1]:.2g} - {errors_p10[0]:.2g} cts/kg/day")
-    print(f"p10/p3-8       = {best_div:.2g} + {errors_div[1]:.2g} - {errors_div[0]:.2g}")
+    print(f"For p3-8 rate  = {best_fit:.3g} + {errors[1]:.2g} - {errors[0]:.2g} cts/kg/yr")
+    print(f"For p10 rate   = {best_fit_p10:.3g} + {errors_p10[1]:.2g} - {errors_p10[0]:.2g} cts/kg/day")
+    print(f"p10/p3-8       = {best_div:.3g} + {errors_div[1]:.2g} - {errors_div[0]:.2g}")
 
 
 
