@@ -270,6 +270,8 @@ if (include_p10):
 
 fig, axes_full = lps.subplots(1, 1, figsize=(4,3), sharex=True)
 
+# set y axis limits
+
 if (plot_hist):
     histo_time_plot.plot(ax=axes_full,**style,color=vset.blue,histtype="fill",alpha=0.5,label="With OB")
     if (include_p10):
@@ -283,15 +285,18 @@ else:
 axes_full.set_xlabel("Time [days]")
 axes_full.set_ylabel("Counts / kg -day")
 if (include_p10):
-    axes_full.legend(loc="upper left")
+    axes_full.legend(loc="best")
 axes_full.set_title(f"{int(energy_low)}, {int(energy_high)} keV")
 
+
+## set x ranges for bands
 end_p8 = x[-1]
 start_p10=x_p10[0]
 end_p10 =x_p10[-1]
 axes_full.set_xlim(-2,end_p10+20)
 middle = (start_p10+end_p8)/2
 max_x = axes_full.get_xlim()[1]
+
 ### overlay average band
 if (average==True):
     c_tot_low,c_tot_high=utils.get_error_bar(total_counts)
