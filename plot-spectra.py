@@ -3,7 +3,7 @@ plot-spectra.py
 Author: Toby Dixon (toby.dixon.23@ucl.ac.uk) 
 """
 from legend_plot_style import LEGENDPlotStyle as lps
-lps.use('legend')
+lps.use('legend_talks')
 import shutil
 import subprocess
 from collections import OrderedDict
@@ -58,6 +58,8 @@ parser.add_argument("--energy", "-e",type=str,help="Energy range to plot",defaul
 parser.add_argument("--binning", "-b",type=int,help="Binning",default=5)
 parser.add_argument("--spectrum","-s",type=str,help="Spectrum to plot",default="mul_surv")
 parser.add_argument("--dataset","-d",type=str,help="Which group of detectors to plot",default="all")
+parser.add_argument("--variable","-V",type=str,help="Variable binning, argument is the path to the cfg file defualt 'None' and flat binning is used",default=None)
+parser.add_argument("--scale","-S",type=str,help="scale to use, default 'log'",default="log")
 
 args = parser.parse_args()
 
@@ -66,9 +68,10 @@ path_all = args.input
 output =args.output
 binning=args.binning
 spectrum =args.spectrum
+scale=args.scale
 energy=args.energy
 dataset=args.dataset
-
+variable = args.variable
 energy_low = int(energy.split(",")[0])
 energy_high = int(energy.split(",")[1])
 os.makedirs("plots",exist_ok=True)
@@ -79,7 +82,7 @@ metadb = LegendMetadata("/data2/public/prodenv/prod-blind/tmp-auto/inputs")
 
 chmap = metadb.channelmap(datetime.now())
 runs=metadb.dataprod.config.analysis_runs
-runs['p10']=['r000','r001']
+runs['p10']=['r000','r001','r002','r003']
 
 run_times=utils.get_run_times(metadb,runs,verbose=1)
 
@@ -94,31 +97,42 @@ for p, _dict in run_times.items():
             exp_10+=(times[1]-times[0])*times[2]/(60*60*24*365)
         elif (p in ["p03","p04","p05","p06","p07","p08"]):
             exp_nu+=(times[1]-times[0])*times[2]/(60*60*24*365)
+
 print("Total exposure in p10:", exp_10, "kg-yr")
 print("Total exposure in other periods:", exp_nu, "kg-yr")
 
+## get binning edges for now the ones for ICPC, this can be also repalced with any other binning
+edges =None
+if (variable is not None):
+    with open(variable, 'r') as json_file:
+        edges=np.unique(utils.string_to_edges(json.load(json_file)["icpc"]))
 
 with uproot.open(path_all) as f2:
     
-    h1=utils.get_hist(f2[f"{spectrum}/{dataset}"],(energy_low,energy_high),binning)
+    h1=utils.get_hist(f2[f"{spectrum}/{dataset}"],(energy_low,energy_high),binning,edges)
 
 with uproot.open(path) as f2:
     
-    h2=utils.get_hist(f2[f"{spectrum}/{dataset}"],(energy_low,energy_high),binning)
+    h2=utils.get_hist(f2[f"{spectrum}/{dataset}"],(energy_low,energy_high),binning,edges)
 
 for i in range(h1.size-2):
     h1[i]/=exp_nu
 for i in range(h2.size-2):
     h2[i]/=exp_10
+
 fig, axes_full = lps.subplots(1, 1, figsize=(7,5), sharex=True)
 
 h2.plot(ax=axes_full, **style,color=vset.blue,label=f"p10 {runs['p10']}")
 h1.plot(ax=axes_full,**style,color=vset.orange,label="p3-8")
 axes_full.set_xlabel("Energy [keV]")
-axes_full.set_ylabel(f"counts/({binning} keV kg yr)")
-axes_full.set_yscale("log")
-axes_full.set_title(f"{spectrum} - {dataset}")
+if (variable is None):
+    axes_full.set_ylabel(f"counts/({binning} keV kg yr)")
+else:
+    axes_full.set_ylabel(f"counts/(keV kg yr)")
 
+axes_full.set_yscale(scale)
+axes_full.set_title(f"{spectrum} - {dataset}")
+axes_full.set_xlim(energy_low,energy_high)
 plt.legend(loc="upper right")
 plt.tight_layout()
 plt.savefig("plots/"+output+".pdf")
