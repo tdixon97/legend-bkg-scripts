@@ -24,7 +24,15 @@ import sys
 import re
 import json
 from legendmeta import LegendMetadata
-plt.rcParams.update({'font.size': 24}) 
+plt.rcParams.update({
+    'font.size': 20,          # Main font size
+    'axes.labelsize': 20,     # Font size of x and y labels
+    'axes.titlesize': 20,     # Font size of titles
+    'xtick.labelsize': 16,    # Font size of x-axis ticks
+    'ytick.labelsize': 16,    # Font size of y-axis ticks
+    'legend.fontsize': 14,    # Font size of legend
+    'figure.titlesize': 20    # Font size of figure titles
+})
 
 from matplotlib.backends.backend_pdf import PdfPages
 vset = tc.tol_cset('vibrant')
@@ -111,7 +119,7 @@ with uproot.open(path_all) as f2:
     
     if ("mul2" in spectrum):
 
-        h1=utils.get_hist(f2[f"mul2_surv_2d/all{spectrum}/{dataset}"],(energy_low,energy_high),binning,edges,spectrum)
+        h1=utils.get_hist(f2[f"mul2_surv_2d/all"],(energy_low,energy_high),binning,edges,spectrum)
     else:
         h1=utils.get_hist(f2[f"{spectrum}/{dataset}"],(energy_low,energy_high),binning,edges,spectrum)
 
@@ -120,7 +128,7 @@ with uproot.open(path) as f2:
     
     if ("mul2" in spectrum):
 
-        h2=utils.get_hist(f2[f"mul2_surv_2d/all{spectrum}/{dataset}"],(energy_low,energy_high),binning,edges,spectrum)
+        h2=utils.get_hist(f2[f"mul2_surv_2d/all"],(energy_low,energy_high),binning,edges,spectrum)
     else:
         h2=utils.get_hist(f2[f"{spectrum}/{dataset}"],(energy_low,energy_high),binning,edges,spectrum)
 
