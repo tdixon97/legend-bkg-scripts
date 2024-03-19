@@ -173,7 +173,7 @@ def get_error_bar(N:float):
     return get_smallest_ci(N,x,y)
 
 
-def get_hist(obj,range:tuple=(132,4195),bins:int=10,variable=None):
+def get_hist(obj,range:tuple=(132,4195),bins:int=10,variable=None,spectrum="mul_surv"):
     """                                                                                                                                                                                                    
     Extract the histogram (hist package object) from the uproot histogram                                                                                                                                  
     Parameters:                                                                                                                                                                                            
@@ -184,8 +184,12 @@ def get_hist(obj,range:tuple=(132,4195),bins:int=10,variable=None):
         - hist                                                                                                                                                                                             
     """
    
-        
-    h=obj.to_hist()[range[0]:range[1]]
+    if (spectrum=="mul2_surv_e1"):
+        h=obj.to_hist().project(1)[range[0]:range[1]]
+    elif (spectrum=="mul2_surv_e2"):
+        h=obj.to_hist().project(0)[range[0]:range[1]]
+    else:
+        h=obj.to_hist()[range[0]:range[1]]
 
     if (variable is not None):
         h=normalise_histo(variable_rebin(h,variable))

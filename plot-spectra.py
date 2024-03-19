@@ -109,11 +109,22 @@ if (variable is not None):
 
 with uproot.open(path_all) as f2:
     
-    h1=utils.get_hist(f2[f"{spectrum}/{dataset}"],(energy_low,energy_high),binning,edges)
+    if ("mul2" in spectrum):
+
+        h1=utils.get_hist(f2[f"mul2_surv_2d/all{spectrum}/{dataset}"],(energy_low,energy_high),binning,edges,spectrum)
+    else:
+        h1=utils.get_hist(f2[f"{spectrum}/{dataset}"],(energy_low,energy_high),binning,edges,spectrum)
+
 
 with uproot.open(path) as f2:
     
-    h2=utils.get_hist(f2[f"{spectrum}/{dataset}"],(energy_low,energy_high),binning,edges)
+    if ("mul2" in spectrum):
+
+        h2=utils.get_hist(f2[f"mul2_surv_2d/all{spectrum}/{dataset}"],(energy_low,energy_high),binning,edges,spectrum)
+    else:
+        h2=utils.get_hist(f2[f"{spectrum}/{dataset}"],(energy_low,energy_high),binning,edges,spectrum)
+
+
 
 for i in range(h1.size-2):
     h1[i]/=exp_nu
