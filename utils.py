@@ -170,10 +170,15 @@ def get_error_bar(N:float):
 
     x= np.linspace(0,5+2*N,5000)
     y=poisson.pmf(N,x)
-    return get_smallest_ci(N,x,y)
+    histo = ( Hist.new.Reg(5000, 0, 0.5+2*N).Double())
+ 
+    for i in range(histo.size-2):
+        histo[i]=y[i]
+
+    return get_smallest_ci(N,x,y)[0],get_smallest_ci(N,x,y)[1],histo
 
 
-def get_hist(obj,range:tuple=(132,4195),bins:int=10,variable=None):
+def get_hist(obj,range:tuple=(132,4195),bins:int=10,variable=None,spectrum="mul_surv"):
     """                                                                                                                                                                                                    
     Extract the histogram (hist package object) from the uproot histogram                                                                                                                                  
     Parameters:                                                                                                                                                                                            
@@ -184,8 +189,12 @@ def get_hist(obj,range:tuple=(132,4195),bins:int=10,variable=None):
         - hist                                                                                                                                                                                             
     """
    
-        
-    h=obj.to_hist()[range[0]:range[1]]
+    if (spectrum=="mul2_surv_e1"):
+        h=obj.to_hist().project(1)[range[0]:range[1]]
+    elif (spectrum=="mul2_surv_e2"):
+        h=obj.to_hist().project(0)[range[0]:range[1]]
+    else:
+        h=obj.to_hist()[range[0]:range[1]]
 
     if (variable is not None):
         h=normalise_histo(variable_rebin(h,variable))
@@ -205,7 +214,16 @@ def normalise_histo(hist,factor=1):
         hist[i]*=factor
     return hist
 
-def integrate_hist(hist,low,high):
+def integrate_hist(hist,energies):
+
+    integral = 0
+    for e in energies:
+        integral +=integrate_hist_one_range(hist,e[0],e[1])
+    
+    
+    return integral
+
+def integrate_hist_one_range(hist,low,high):
     """ Integrate the histogram"""
 
     bin_centers= hist.axes.centers[0]
@@ -341,9 +359,7 @@ def sample_hist(hist,N):
 
     edges = hist.axes[0].edges
     int = sum(hist.values())
-
     counts = hist.view()
-
     bin_widths = np.diff(edges)
     probabilities = counts / np.sum(counts )
 

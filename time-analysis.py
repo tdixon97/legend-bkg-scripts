@@ -48,7 +48,7 @@ parser = argparse.ArgumentParser(description="Script to plot the time dependence
 parser.add_argument("--output", "-o",type=str,help="Name of output root file, eg l200a-vancouver_full_alpha will be appended with energy range",default="l200a-vancouver_full_alpha")
 parser.add_argument("--input", "-i",type=str,help="Name of input root file",default = "outputs/l200a-vancouver_full-dataset-v0.0.0.root")
 parser.add_argument("--input_p10", "-I",type=str,help="Name of input root file for p10",default =None)
-parser.add_argument("--energy", "-e",type=str,help="comma seperate energy range",default="4000,6000")
+parser.add_argument("--energy", "-e",type=str,help="comma seperate energy range should be of the form (a,b),(c,d) etc",default="4000,6000")
 parser.add_argument("--plot_hist","-p",type=bool,help="Boolean flag to plot data as histogram ")
 parser.add_argument("--spectrum","-s",type=str,help="Spectrum to fit",default="mul_surv")
 parser.add_argument("--BAT_overlay","-B",type=str,help="Overlay the BAT fit? argument is the directory with BAT fit results",default=None)
@@ -72,9 +72,26 @@ if (input_p10 is None):
     
 energy=args.energy
 
-energy_low = float(energy.split(",")[0])
-energy_high = float(energy.split(",")[1])
+energy_list=[]
+## just two numbers
+if ("(" not in energy):
+    energy_low = float(energy.split(",")[0])
+    energy_high = float(energy.split(",")[1])
+    energy_list.append((energy_low,energy_high))
+## a list
+else:
+    energy_split=energy.split("(")
+    for e in energy_split:
+        if ("," not in e):
+            continue
+        else:
+            energy = e.split(")")[0]
+            energy_low = float(energy.split(",")[0])
+            energy_high = float(energy.split(",")[1])
+            energy_list.append((energy_low,energy_high))
 
+if (len(energy_list)>1 and subtract):
+    raise ValueError("cant specifiy a split range for the counting analysis ")
 
 ### load the meta-data
 ### ----------------------
@@ -92,8 +109,10 @@ if (include_p10):
 run_times=utils.get_run_times(metadb,runs,verbose=1)
 
 ### load the data
-
-out_name =f"{output}_{int(energy_low)}_{int(energy_high)}.root"
+e_str=""
+for (energy_low,energy_high) in energy_list:
+    e_str +=f"{int(energy_low)}_{int(energy_high)}_"
+out_name =f"{output}_{e_str}.root"
 
 hists={}
 hists_p10={}
@@ -175,7 +194,7 @@ for period in periods:
     for run in run_list:
         if run in hists[period].keys():
             if (subtract==False):
-                c_tmp=utils.integrate_hist(hists[period][run],energy_low,energy_high)
+                c_tmp=utils.integrate_hist(hists[period][run],energy_list)
                 counts[period][run]=(c_tmp,utils.get_error_bar(c_tmp)[0],utils.get_error_bar(c_tmp)[1])
             else:
                 counts[period][run],_=utils.sideband_counting(hists[period][run],energy_low-15,
@@ -186,7 +205,7 @@ for period in periods:
         if include_p10:
             if run in hists_p10[period].keys():
                 if (subtract==False):
-                    c_tmp=utils.integrate_hist(hists_p10[period][run],energy_low,energy_high)
+                    c_tmp=utils.integrate_hist(hists_p10[period][run],energy_list)
                     counts_p10[period][run]=(c_tmp,utils.get_error_bar(c_tmp)[0],utils.get_error_bar(c_tmp)[1])
                 else:
                     counts_p10[period][run],_=utils.sideband_counting(hists_p10[period][run],energy_low-15,
@@ -196,12 +215,14 @@ for period in periods:
 
 ### and for the total
 if (subtract==False):
-    c_tmp=utils.integrate_hist(hist_tot,energy_low,energy_high)
-    counts_total=(c_tmp,utils.get_error_bar(c_tmp)[0],utils.get_error_bar(c_tmp)[1])
-
-    c_tmp=utils.integrate_hist(hist_tot_p10,energy_low,energy_high)
-    counts_total_p10=(c_tmp,utils.get_error_bar(c_tmp)[0],utils.get_error_bar(c_tmp)[1])
-
+    c_tmp=utils.integrate_hist(hist_tot,energy_list)
+    error =utils.get_error_bar(c_tmp)
+    counts_total=(c_tmp,error[0],error[1])
+    posterior=error[2]
+    c_tmp=utils.integrate_hist(hist_tot_p10,energy_list)
+    error_p10=utils.get_error_bar(c_tmp)
+    counts_total_p10=(c_tmp,error_p10[0],error_p10[1])
+    posterior_p10=error_p10[2]
 else:
     counts_total_p10,posterior_p10=utils.sideband_counting(hist_tot_p10,energy_low-15,
                             energy_low,energy_high,energy_high+15,pdf,f" {energy_low} to {energy_high} keV p10-TOTAL")
@@ -349,7 +370,7 @@ axes_full.set_xlabel("Time [days]")
 axes_full.set_ylabel("Counts / kg -day")
 if (include_p10):
     axes_full.legend(loc="best")
-axes_full.set_title(f"{int(energy_low)}, {int(energy_high)} keV")
+axes_full.set_title(f"{e_str} keV")
 
 
 ## set x ranges for bands
@@ -403,58 +424,58 @@ plt.savefig("outputs/"+out_name[0:-5]+".pdf")
 
 ## make some posterior plots / extract some numbers
 ### ------------------------------------------------
-if (subtract):
-    counts_samples = utils.sample_hist(posterior,N=int(1e6))
-    counts_p10_samples = utils.sample_hist(posterior_p10,N=int(1e6))
 
-    rates = counts_samples/total_exposure
-    rates_p10 = counts_p10_samples/total_exposure_p10
+counts_samples = utils.sample_hist(posterior,N=int(1e6))
+counts_p10_samples = utils.sample_hist(posterior_p10,N=int(1e6))
 
-    div = rates_p10/rates
+rates = counts_samples/total_exposure
+rates_p10 = counts_p10_samples/total_exposure_p10
 
-    histo_div = ( Hist.new.Reg(200, 0,1.5).Double())
-    histo = ( Hist.new.Reg(200, 0, max(max(rates),max(rates_p10))).Double())
-    histo_p10 = ( Hist.new.Reg(200, 0, max(max(rates),max(rates_p10))).Double())
+div = rates_p10/rates
 
-    histo.fill(rates)
-    histo_p10.fill(rates_p10)
-    histo_div.fill(div)
-    fig, axes_full = lps.subplots(1, 1, figsize=(4,3), sharex=True)
+histo_div = ( Hist.new.Reg(200, 0,1.5).Double())
+histo = ( Hist.new.Reg(200, 0, max(max(rates),max(rates_p10))).Double())
+histo_p10 = ( Hist.new.Reg(200, 0, max(max(rates),max(rates_p10))).Double())
 
-    histo.plot(ax=axes_full,**style,histtype="fill",alpha=0.4,color=vset.blue,label="With OB")
-    histo_p10.plot(ax=axes_full,**style,histtype="fill",alpha=0.4,color=vset.orange,label="No OB")
+histo.fill(rates)
+histo_p10.fill(rates_p10)
+histo_div.fill(div)
+fig, axes_full = lps.subplots(1, 1, figsize=(4,3), sharex=True)
 
-    axes_full.set_xlabel("counts/kg/day")
-    axes_full.set_ylabel("Prob [arb]")
-    axes_full.legend(loc="best")
-    axes_full.set_title(f"{int(energy_low)}, {int(energy_high)} keV")
-    
-    plt.savefig("outputs/"+out_name[0:-5]+"_posterior.pdf")
+histo.plot(ax=axes_full,**style,histtype="fill",alpha=0.4,color=vset.blue,label="With OB")
+histo_p10.plot(ax=axes_full,**style,histtype="fill",alpha=0.4,color=vset.orange,label="No OB")
 
-    fig, axes_full = lps.subplots(1, 1, figsize=(4,3), sharex=True)
+axes_full.set_xlabel("counts/kg/day")
+axes_full.set_ylabel("Prob [arb]")
+axes_full.legend(loc="best")
+axes_full.set_title(f"{e_str} keV")
 
-    histo_div.plot(ax=axes_full,**style,color=vset.blue,histtype="fill",alpha=0.4)
+plt.savefig("outputs/"+out_name[0:-5]+"_posterior.pdf")
 
-    axes_full.set_xlabel("rate (p10)/rate (p3-p8)")
+fig, axes_full = lps.subplots(1, 1, figsize=(4,3), sharex=True)
 
-    plt.savefig("outputs/"+out_name[0:-5]+"_ratio_posterior.pdf")
+histo_div.plot(ax=axes_full,**style,color=vset.blue,histtype="fill",alpha=0.4)
 
-    ## now the summary stats
-    w,x=histo.to_numpy()
-    w_p10,x_p10=histo_p10.to_numpy()
-    w_div,x_div=histo_div.to_numpy()
+axes_full.set_xlabel("rate (p10)/rate (p3-p8)")
 
-    best_fit = x[np.argmax(w)]
-    best_fit_p10=x_p10[np.argmax(w_p10)]
-    best_div =x_div[np.argmax(w_div)]
+plt.savefig("outputs/"+out_name[0:-5]+"_ratio_posterior.pdf")
 
-    errors = utils.get_smallest_ci(best_fit,x,w)
-    errors_p10 = utils.get_smallest_ci(best_fit_p10,x_p10,w_p10)
-    errors_div = utils.get_smallest_ci(best_div,x_div,w_div)
+## now the summary stats
+w,x=histo.to_numpy()
+w_p10,x_p10=histo_p10.to_numpy()
+w_div,x_div=histo_div.to_numpy()
 
-    print(f"For p3-8 rate  = {best_fit:.3g} + {errors[1]:.2g} - {errors[0]:.2g} cts/kg/yr")
-    print(f"For p10 rate   = {best_fit_p10:.3g} + {errors_p10[1]:.2g} - {errors_p10[0]:.2g} cts/kg/day")
-    print(f"p10/p3-8       = {best_div:.3g} + {errors_div[1]:.2g} - {errors_div[0]:.2g}")
+best_fit = x[np.argmax(w)]
+best_fit_p10=x_p10[np.argmax(w_p10)]
+best_div =x_div[np.argmax(w_div)]
+
+errors = utils.get_smallest_ci(best_fit,x,w)
+errors_p10 = utils.get_smallest_ci(best_fit_p10,x_p10,w_p10)
+errors_div = utils.get_smallest_ci(best_div,x_div,w_div)
+
+print(f"For p3-8 rate  = {best_fit:.3g} + {errors[1]:.2g} - {errors[0]:.2g} cts/kg/yr")
+print(f"For p10 rate   = {best_fit_p10:.3g} + {errors_p10[1]:.2g} - {errors_p10[0]:.2g} cts/kg/day")
+print(f"p10/p3-8       = {best_div:.3g} + {errors_div[1]:.2g} - {errors_div[0]:.2g}")
 
 
 
