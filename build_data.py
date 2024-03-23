@@ -579,25 +579,9 @@ def main():
     ### FOR ON/AC -> OFF we need to modify the geds.energy geds.hit_rawid and geds.is_good_hit,
     ### to remove this hits, we then need to modify mulitplicity
     qcs_flag = "is_good_hit" if args.qc=="old" else "is_good_hit_new"
-    import collections
-    ### first print the data
-    #data = data[ (~data.trigger.is_forced)    # no forced triggers
-              #      & (~data.coincident.puls) # no pulser eventsdata
-              #          & (~data.coincident.muon) ]
-
-    count = dict(collections.Counter(ak.flatten(data["geds","unphysical_hit_rawid"])))
-    sorted_map_by_keys = dict(sorted(count.items(),key=lambda item: item[1],reverse=True))
-    for c,i in sorted_map_by_keys.items():
-        print(geds_mapping[f"ch{c}"]," ",i)
-    print("\n")
+    
     data=filter_off_ac(data,qcs_flag=qcs_flag,off_dets=usability["ac_to_off"],ac_dets=usability["ac"])
-    count = dict(collections.Counter(ak.flatten(data["geds","unphysical_hit_rawid"])))
-    sorted_map_by_keys = dict(sorted(count.items(),key=lambda item: item[1],reverse=True))
-
-    for c,i in sorted_map_by_keys.items():
-        print(geds_mapping[f"ch{c}"]," ",i)
-    print("\n")
-
+    
     ### and the usual cuts
     data = data[ (~data.trigger.is_forced)    # no forced triggers
                     & (~data.coincident.puls) # no pulser eventsdata
