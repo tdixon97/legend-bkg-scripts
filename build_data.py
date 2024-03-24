@@ -581,9 +581,8 @@ def main():
     ### to remove this hits, we then need to modify mulitplicity
     qcs_flag = "is_good_hit" if args.qc=="old" else "is_good_hit_new"
 
+    
     data=filter_off_ac(data,qcs_flag=qcs_flag,off_dets=usability["ac_to_off"],ac_dets=usability["ac"])
-    print_events(data,qcs_flag)
-
 
     ### and the usual cuts
     data = data[ (~data.trigger.is_forced)    # no forced triggers
