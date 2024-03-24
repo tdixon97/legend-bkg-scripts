@@ -582,7 +582,6 @@ def main():
     qcs_flag = "is_good_hit" if args.qc=="old" else "is_good_hit_new"
 
     data=filter_off_ac(data,qcs_flag=qcs_flag,off_dets=usability["ac_to_off"],ac_dets=usability["ac"])
-    print_events(data,qcs_flag)
 
 
     ### and the usual cuts
@@ -590,7 +589,7 @@ def main():
                     & (~data.coincident.puls) # no pulser eventsdata
                     & (~data.coincident.muon) # no muons
                     & (data.geds.multiplicity > 0) # no purely lar triggered events
-                  # &(ak.all(data.geds[qcs_flag],axis=-1))
+                   &(ak.all(data.geds[qcs_flag],axis=-1))
                     ]
     
     
