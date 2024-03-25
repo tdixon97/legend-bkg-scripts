@@ -266,6 +266,7 @@ def get_data_awkard(cfg:dict,periods=None,target_key=None,Nmax:int=None,run_list
                     # get uniques rawids for loading hit data
                     rawids = np.unique(ak.to_numpy(ak.ravel(tcm.id)))
                     energy = None
+                    rawid_sort=None
                     physical =None
 
                     # for each table in the hit file
@@ -283,16 +284,16 @@ def get_data_awkard(cfg:dict,periods=None,target_key=None,Nmax:int=None,run_list
                             idx=ak.to_numpy(ak.flatten(idx_mask)),
                         )
 
-                    
                         # now bring back to original shape
                         data_unf = ak.unflatten(energy_data, idx_loc)
-
+                        rawid_unf=ak.full_like(data_unf,rawid,dtype="int")
                         energy = (
                             data_unf if energy is None else ak.concatenate((energy, data_unf), axis=-1)
                         )
-                     
+                        rawid_sort= (rawid_unf if rawid_sort is None else ak.concatenate((rawid_sort,rawid_unf),axis=-1))
+
                     d_evt["geds", "unphysical_hit_rawid"] = tcm_unphysical.id
-                    d_evt["geds", "hit_rawid"] = tcm.id
+                    d_evt["geds", "hit_rawid"] = rawid_sort
                     d_evt["geds", "energy"] = energy
                  
                     if run in metadb.dataprod.runinfo[period].keys():
@@ -300,6 +301,7 @@ def get_data_awkard(cfg:dict,periods=None,target_key=None,Nmax:int=None,run_list
                     else:
                         start = json.load(open('/data1/users/calgaro/legend-metadata/dataprod/runinfo.json'))[period][run]["phy"]["start_key"]
                         ch = metadb.channelmap(start)
+                    
                     ac = [ _dict["daq"]["rawid"] for _name, _dict in ch.items() if ch[_name]["system"] == "geds" and ch[_name]["analysis"]["usability"] in ["ac"]]
                     off= [ _dict["daq"]["rawid"] for _name, _dict in ch.items() if ch[_name]["system"] == "geds" and ch[_name]["analysis"]["usability"] in ["off"]]
 
@@ -558,7 +560,7 @@ def main():
 
     # analysis runs
     runs=metadb.dataprod.config.analysis_runs
-    runs['p10']=['r000','r001','r002','r003']
+    runs['p10']=['r004']
 
     os.makedirs("outputs",exist_ok=True)
     output_cache = f"outputs/{out_name.replace('.root', '.parquet')}"
@@ -572,16 +574,17 @@ def main():
 
     print("Got data")
     print(recompute_qc_flag)
-
     ### Add cuts on bad channels
     ### ---------------------------------------------------------------------
     ### For ON->AC this is just another cut
     ### FOR ON/AC -> OFF we need to modify the geds.energy geds.hit_rawid and geds.is_good_hit,
     ### to remove this hits, we then need to modify mulitplicity
     qcs_flag = "is_good_hit" if args.qc=="old" else "is_good_hit_new"
+
     
     data=filter_off_ac(data,qcs_flag=qcs_flag,off_dets=usability["ac_to_off"],ac_dets=usability["ac"])
-    
+
+
     ### and the usual cuts
     data = data[ (~data.trigger.is_forced)    # no forced triggers
                     & (~data.coincident.puls) # no pulser eventsdata
@@ -589,6 +592,7 @@ def main():
                     & (data.geds.multiplicity > 0) # no purely lar triggered events
                    &(ak.all(data.geds[qcs_flag],axis=-1))
                     ]
+    
     
 
 
