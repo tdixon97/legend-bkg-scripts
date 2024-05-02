@@ -9,7 +9,7 @@ Currently there is:
 4. `remove-OB.py` :     Script used to estimate the sensitivity to removing the OB
 
 The `build_data.py` script can be run in LNGS in the current production enviroment as loaded with:
-    
+
     source "/data2/public/prodenv/setup.sh"
 
 As:
@@ -23,7 +23,7 @@ Where:
 * `<RECOMPUTE>` : is a boolean of whether to recompute QC flags based on a list of bad detectors
 * `<TARGET KEY>` : is a string of type YMDTDHMZ, eg '20240317T141137Z', up to which data are included; later cycles are not loaded
 
-The rest of the scripts do not depend on `pygama` and can be run in the LEGEND container on LNGS. 
+The rest of the scripts do not depend on `pygama` and can be run in the LEGEND container on LNGS.
 Both have argsparsers and can be run with `python <SCRIPT> -h ` to see the options:
 More details:
 

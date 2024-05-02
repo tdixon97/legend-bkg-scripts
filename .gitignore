@@ -7,7 +7,7 @@ outputs/*
 __pycache__/
 *.py[cod]
 *$py.class
-*.pdf 
+*.pdf
 plots/*
 
 # C extensions
