@@ -357,14 +357,14 @@ fig, axes_full = lps.subplots(1, 1, figsize=(4,3), sharex=True)
 # set y axis limits
 
 if (plot_hist):
-    histo_time_plot.plot(ax=axes_full,**style,color=vset.blue,histtype="fill",alpha=0.5,label="With OB")
+    histo_time_plot.plot(ax=axes_full,**style,color=vset.orange,histtype="fill",alpha=0.5,label="With OB")
     if (include_p10):
-        histo_time_plot_p10.plot(ax=axes_full,**style,color=vset.orange,histtype="fill",alpha=0.5,label="NO OB")
+        histo_time_plot_p10.plot(ax=axes_full,**style,color=vset.blue,histtype="fill",alpha=0.5,label="NO OB")
 
 else:
-    axes_full.errorbar(x=x,y=y,yerr=[np.abs(ey_low),np.abs(ey_high)],color=vset.blue,fmt="o",ecolor="grey",label="With OB")
+    axes_full.errorbar(x=x,y=y,yerr=[np.abs(ey_low),np.abs(ey_high)],color=vset.red,fmt="o",ecolor=vset.orange,label="With OB")
     if (include_p10):
-        axes_full.errorbar(x=x_p10,y=y_p10,yerr=[np.abs(ey_low_p10),np.abs(ey_high_p10)],color=vset.red,fmt="o",ecolor=vset.orange,label="No OB")
+        axes_full.errorbar(x=x_p10,y=y_p10,yerr=[np.abs(ey_low_p10),np.abs(ey_high_p10)],color=vset.blue,fmt="o",ecolor="grey",label="No OB")
 
 axes_full.set_xlabel("Time [days]")
 axes_full.set_ylabel("Counts / kg -day")
@@ -387,14 +387,14 @@ if (average==True):
     low_rate = (counts_total[0]-counts_total[1])/total_exposure
     high_rate = (counts_total[0]+counts_total[2])/total_exposure
 
-    axes_full.axhspan(low_rate,high_rate,xmin=0,xmax=(middle)/max_x ,color=vset.blue, alpha=0.5)
+    axes_full.axhspan(low_rate,high_rate,xmin=0,xmax=(middle)/max_x ,color=vset.orange, alpha=0.5)
 
     if include_p10:
         low_rate_p10 = (counts_total_p10[0]-counts_total_p10[1])/total_exposure_p10
         high_rate_p10 = (counts_total_p10[0]+counts_total_p10[2])/total_exposure_p10
 
 
-        axes_full.axhspan(low_rate_p10,high_rate_p10,xmin=(middle)/max_x,xmax=(end_p10+10)/max_x, color=vset.orange, alpha=0.5)
+        axes_full.axhspan(low_rate_p10,high_rate_p10,xmin=(middle)/max_x,xmax=(end_p10+10)/max_x, color=vset.blue, alpha=0.5)
 
 #### overlay BAT fit results
 range_x = axes_full.get_xlim()[1]
@@ -433,9 +433,9 @@ rates_p10 = counts_p10_samples/total_exposure_p10
 
 div = rates_p10/rates
 
-histo_div = ( Hist.new.Reg(200, 0,1.5).Double())
-histo = ( Hist.new.Reg(200, 0, max(max(rates),max(rates_p10))).Double())
-histo_p10 = ( Hist.new.Reg(200, 0, max(max(rates),max(rates_p10))).Double())
+histo_div = ( Hist.new.Reg(2000, 0,1.5).Double())
+histo = ( Hist.new.Reg(2000, 0, max(max(rates),max(rates_p10))).Double())
+histo_p10 = ( Hist.new.Reg(2000, 0, max(max(rates),max(rates_p10))).Double())
 
 histo.fill(rates)
 histo_p10.fill(rates_p10)

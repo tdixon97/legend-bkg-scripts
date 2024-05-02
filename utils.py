@@ -253,9 +253,9 @@ def sideband_counting(hist,low,center_low,center_high,high,pdf=None,name=""):
     """
 
     ## get the counts per bin
-    N1 = integrate_hist(hist,low,center_low)
-    N2 = integrate_hist(hist,center_low,center_high)
-    N3 = integrate_hist(hist,center_high,high)
+    N1 = integrate_hist_one_range(hist,low,center_low)
+    N2 = integrate_hist_one_range(hist,center_low,center_high)
+    N3 = integrate_hist_one_range(hist,center_high,high)
 
     max_S = 10+N2*2
     max_B = 10+N2*2

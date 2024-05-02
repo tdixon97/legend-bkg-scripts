@@ -90,7 +90,7 @@ metadb = LegendMetadata("/data2/public/prodenv/prod-blind/tmp-auto/inputs")
 
 chmap = metadb.channelmap(datetime.now())
 runs=metadb.dataprod.config.analysis_runs
-runs['p10']=['r000','r001','r002','r003']
+runs['p10']=['r004']
 
 run_times=utils.get_run_times(metadb,runs,verbose=1)
 
@@ -117,7 +117,7 @@ if (variable is not None):
 
 with uproot.open(path_all) as f2:
     
-    if ("mul2" in spectrum):
+    if ("mul2" in spectrum and ("e1" in spectrum or "e2" in spectrum)):
 
         h1=utils.get_hist(f2[f"mul2_surv_2d/all"],(energy_low,energy_high),binning,edges,spectrum)
     else:
@@ -126,7 +126,7 @@ with uproot.open(path_all) as f2:
 
 with uproot.open(path) as f2:
     
-    if ("mul2" in spectrum):
+    if ("mul2" in spectrum and ("e1" in spectrum or "e2" in spectrum)):
 
         h2=utils.get_hist(f2[f"mul2_surv_2d/all"],(energy_low,energy_high),binning,edges,spectrum)
     else:
