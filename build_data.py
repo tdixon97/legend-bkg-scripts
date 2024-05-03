@@ -266,7 +266,6 @@ def get_data_awkard(
                             run,
                         )
 
-                # loop
                 for f_evt in fl_evt:
 
                     f_tcm = f_evt.replace(tier, "tcm")
@@ -384,7 +383,7 @@ def get_data_awkard(
                     d_evt["run"] = run
 
                     data = d_evt if data is None else ak.concatenate((data, d_evt))
-                    N += 1
+                    n += 1
 
                     # for debug
                     if n_max is not None and n > n_max:
