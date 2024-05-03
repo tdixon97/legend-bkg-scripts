@@ -586,23 +586,27 @@ def main():
     paths_cfg = {
         "p03": {
             "tier": "pet",
-            "evt_path": "/data2/public/prodenv/prod-blind/ref-v1.0.0/generated/tier/",
+            "evt_path": "/data2/public/prodenv/prod-blind/ref-v1.0.1/generated/tier/",
         },
         "p04": {
             "tier": "pet",
-            "evt_path": "/data2/public/prodenv/prod-blind/ref-v1.0.0/generated/tier/",
+            "evt_path": "/data2/public/prodenv/prod-blind/ref-v1.0.1/generated/tier/",
         },
         "p06": {
             "tier": "pet",
-            "evt_path": "/data2/public/prodenv/prod-blind/ref-v1.0.0/generated/tier/",
+            "evt_path": "/data2/public/prodenv/prod-blind/ref-v1.0.1/generated/tier/",
         },
         "p07": {
             "tier": "pet",
-            "evt_path": "/data2/public/prodenv/prod-blind/ref-v1.0.0/generated/tier/",
+            "evt_path": "/data2/public/prodenv/prod-blind/ref-v1.0.1/generated/tier/",
         },
         "p08": {
             "tier": "pet",
-            "evt_path": "/data2/public/prodenv/prod-blind/ref-v1.0.0/generated/tier/",
+            "evt_path": "/data2/public/prodenv/prod-blind/ref-v1.0.1/generated/tier/",
+        },
+        "p09": {
+            "tier": "pet",
+            "evt_path": "/data2/public/prodenv/prod-blind/ref-v1.0.1/generated/tier/",
         },
         "p10": {
             "tier": "evt",
@@ -651,7 +655,7 @@ def main():
 
     # analysis runs
     runs = metadb.dataprod.config.analysis_runs
-    runs["p10"] = ["r004"]
+    runs["p10"] = ["r000", "r001", "r003", "r004", "r005", "r006"]
 
     os.makedirs("outputs", exist_ok=True)
     output_cache = f"outputs/{out_name.replace('.root', '.parquet')}"
@@ -689,7 +693,7 @@ def main():
     data = data[
         (~data.trigger.is_forced)  # no forced triggers
         & (~data.coincident.puls)  # no pulser eventsdata
-        & (~data.coincident.muon)  # no muons
+        & (~data.coincident.muon_offline)  # no muons (as reconstructed offline; use 'muon' to flag from MUON01) 
         & (data.geds.multiplicity > 0)  # no purely lar triggered events
         & (ak.all(data.geds[qcs_flag], axis=-1))
     ]
