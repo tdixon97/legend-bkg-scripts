@@ -426,23 +426,32 @@ def get_data_awkward(
 
                 # change usabilities for tmp-auto of p10
                 if data is not None and period == "p10" and "tmp-auto" in evt_path:
-                    # (the right thing would be to specify a specific ref production, but who cares)
-                    new_ch = json.load(
-                        open(
-                            "/global/cfs/cdirs/m2676/users/calgaro/legend-bkg-scripts/updated_metadata/l200-p10-r000-T%-all-config.json"
-                        )
-                    )
-                    # some detectors change usability from r001 on -> update the usability map just for them!
-                    if int(run.split("r")[-1]) > 0:
-                        updated_map = json.load(
+                    if "/global/cfs/cdirs/m2676" in evt_path:
+                        # (the right thing would be to specify a specific ref production, but who cares)
+                        new_ch = json.load(
                             open(
-                                "/global/cfs/cdirs/m2676/users/calgaro/legend-bkg-scripts/updated_metadata/l200-p10-r001-T%-all-config.json"
+                                "/global/cfs/cdirs/m2676/users/calgaro/legend-bkg-scripts/updated_metadata/l200-p10-r000-T%-all-config.json"
                             )
                         )
-                        for k in updated_map["analysis"].keys():
-                            new_ch["analysis"][k]["usability"] = updated_map[
-                                "analysis"
-                            ][k]["usability"]
+                        # some detectors change usability from r001 on -> update the usability map just for them!
+                        if int(run.split("r")[-1]) > 0:
+                            updated_map = json.load(
+                                open(
+                                    "/global/cfs/cdirs/m2676/users/calgaro/legend-bkg-scripts/updated_metadata/l200-p10-r001-T%-all-config.json"
+                                )
+                            )
+                            for k in updated_map["analysis"].keys():
+                                new_ch["analysis"][k]["usability"] = updated_map[
+                                    "analysis"
+                                ][k]["usability"]
+                    else:
+                        # we get the most updated metadata
+                        start = json.load(
+                            open(
+                                os.path.join(evt_path, "../../inputs/dataprod/runinfo.json")
+                            )
+                        )[period][run]["phy"]["start_key"]
+                        new_ch = metadb.channelmap(start)
 
                     # we need to retrieve a list of channels that now are ON or AC or OFF
                     on_dets = []
