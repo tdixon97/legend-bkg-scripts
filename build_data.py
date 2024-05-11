@@ -419,6 +419,8 @@ def get_data_awkward(
                     d_evt["run"] = run
 
                     data = d_evt if data is None else ak.concatenate((data, d_evt))
+                    n += 1
+
 
                     # for debug
                     if n_max is not None and n > n_max:

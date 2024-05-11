@@ -201,7 +201,7 @@ axes_full.set_xlabel("Energy [keV]")
 if variable is None:
     axes_full.set_ylabel(f"counts/({binning} keV kg yr)")
 else:
-    axes_full.set_ylabel(f"counts/(keV kg yr)")
+    axes_full.set_ylabel("counts/(keV kg yr)")
 
 axes_full.set_yscale(scale)
 axes_full.set_title(f"{spectrum} - {dataset}")
