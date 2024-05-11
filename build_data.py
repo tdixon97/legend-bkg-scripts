@@ -27,6 +27,7 @@ stream_handler = logging.StreamHandler()
 stream_handler.setLevel(logging.DEBUG)
 formatter = logging.Formatter("%(asctime)s: %(message)s")
 stream_handler.setFormatter(formatter)
+logger.addHandler(stream_handler)
 # -----------------------------------------------------------
 
 
@@ -123,7 +124,7 @@ def cross_talk_corrected_energies(
     E = E,A - sum_{i=other channels}E_i*C_{i,A}
     where C_AB = cross talk from A on channel B
 
-    In this implementation the cross talk matrix is stored in a JSON file keyed by channel therefore  one can acces
+    In this implementation the cross talk matrix is stored in a JSON file keyed by channel therefore  one can access
     C_AB = cross talk from A on channel B
 
     cAB = matrix[channelA][channelB]
@@ -177,8 +178,9 @@ def cross_talk_corrected_energies(
         )
 
 
-def get_data_awkard(
+def get_data_awkward(
     cfg: dict,
+    qcs_flag,
     periods=None,
     target_key=None,
     n_max: int = None,
@@ -187,17 +189,20 @@ def get_data_awkard(
     metadb=LegendMetadata(),
 ):
     """
-    A function to load the evt tier data into an awkard array also getting the energies
+    A function to load the evt tier data into an awkward array also getting the energies
     Parameters
     ----------------------
         - cfg: path to the data for each period
+        - qcs: string specifying what QC should be used (old or new ones)
         - periods: list of periods to use
+        - target_key: string of format %Y%M%DT%H%M%SZ up to which we keep timestamps
+        - usability: dictionary with lists of channel rawids for which the usability has to be changed
         - n_max (int): used for debugging, if not None (the default) only n_max files will be read
-        - run_list (dict): dictonary of run_lists
+        - run_list (dict): dictionary of run_lists
     Returns
 
     ----------------------
-        - an awkard array of the data
+        - an awkward array of the data
 
     Example
     ----------------------
@@ -219,16 +224,28 @@ def get_data_awkard(
             logger.info(f"...{period}")
 
             for run in tqdm(run_l):
+                if period == "p08" and run == "r002":
+                    continue
+                if period == "p10" and run == "r005":
+                    continue
+
                 logger.info(f"...... {run}")
                 tier = cfg[period]["tier"]
                 evt_path = cfg[period]["evt_path"]
                 tier = "evt" if "tmp-auto" in evt_path else "pet"
 
                 if tier == "evt":
-
                     fl_evt = glob.glob(
-                        evt_path + "/" + tier + f"/phy/{period}/{run}/*-tier_evt.lh5"
+                        os.path.join(evt_path, tier)
+                        + f"/phy/{period}/{run}/*-tier_evt.lh5"
                     )
+
+                    for f in fl_evt:
+                        if any(key in f for key in bad_keys):
+                            logger.info(
+                                f"Error the key {f} is present in the data but shouldn't be"
+                            )
+
                     # remove the bad keys
                     fl_evt_new = []
                     for f in fl_evt:
@@ -239,13 +256,23 @@ def get_data_awkard(
 
                 else:
                     fl_evt = glob.glob(
-                        evt_path + "/" + tier + f"/phy/{period}/{run}/*-tier_pet.lh5"
+                        os.path.join(evt_path, tier)
+                        + f"/phy/{period}/{run}/*-tier_pet.lh5"
                     )
+
                     for f in fl_evt:
                         if any(key in f for key in bad_keys):
-                            raise ValueError(
-                                f"Error the key {f} is present in the data but shouldnt be"
+                            logger.info(
+                                f"Error the key {f} is present in the data but shouldn't be"
                             )
+
+                    # remove the bad keys
+                    fl_evt_new = []
+                    for f in fl_evt:
+                        if not any(key in f for key in bad_keys):
+                            fl_evt_new.append(f)
+
+                    fl_evt = fl_evt_new
 
                 # filter out files based on target key (if present)
                 if target_key is not None:
@@ -266,9 +293,30 @@ def get_data_awkard(
                             run,
                         )
 
+                # retrieve the map from the same ref production from where you are loading data
+                if period == "p10" and "/global/cfs/cdirs/m2676" in evt_path:
+                    start = json.load(
+                        open(
+                            "/global/cfs/cdirs/m2676/users/calgaro/legend-bkg-scripts/updated_metadata/runinfo.json"
+                        )
+                    )[period][run]["phy"]["start_key"]
+                    ch = metadb.channelmap(start)
+                else:
+                    start = json.load(
+                        open(
+                            os.path.join(evt_path, "../../inputs/dataprod/runinfo.json")
+                        )
+                    )[period][run]["phy"]["start_key"]
+                    ch = metadb.channelmap(start)
+
+                # loop
                 for f_evt in fl_evt:
 
-                    f_tcm = f_evt.replace(tier, "tcm")
+                    f_tcm = (
+                        f_evt.replace(tier, "tcm").replace("ref-v1.0.1", "ref-v1.0.0")
+                        if "ref-v1.0.1" in evt_path
+                        else f_evt.replace(tier, "tcm")
+                    )
                     f_hit = f_evt.replace(
                         tier, "hit" if "tmp-auto" in evt_path else "pht"
                     )
@@ -344,18 +392,6 @@ def get_data_awkard(
                     d_evt["geds", "hit_rawid"] = rawid_sort
                     d_evt["geds", "energy"] = energy
 
-                    if run in metadb.dataprod.runinfo[period].keys():
-                        ch = metadb.channelmap(
-                            metadb.dataprod.runinfo[period][run]["phy"]["start_key"]
-                        )
-                    else:
-                        start = json.load(
-                            open(
-                                "/data1/users/calgaro/legend-metadata/dataprod/runinfo.json"
-                            )
-                        )[period][run]["phy"]["start_key"]
-                        ch = metadb.channelmap(start)
-
                     ac = [
                         _dict["daq"]["rawid"]
                         for _name, _dict in ch.items()
@@ -385,9 +421,74 @@ def get_data_awkard(
                     data = d_evt if data is None else ak.concatenate((data, d_evt))
                     n += 1
 
+
                     # for debug
                     if n_max is not None and n > n_max:
                         break
+
+                # change usabilities for tmp-auto of p10
+                if data is not None and period == "p10" and "tmp-auto" in evt_path:
+                    if "/global/cfs/cdirs/m2676" in evt_path:
+                        # (the right thing would be to specify a specific ref production, but who cares)
+                        new_ch = json.load(
+                            open(
+                                "/global/cfs/cdirs/m2676/users/calgaro/legend-bkg-scripts/updated_metadata/l200-p10-r000-T%-all-config.json"
+                            )
+                        )
+                        # some detectors change usability from r001 on -> update the usability map just for them!
+                        if int(run.split("r")[-1]) > 0:
+                            updated_map = json.load(
+                                open(
+                                    "/global/cfs/cdirs/m2676/users/calgaro/legend-bkg-scripts/updated_metadata/l200-p10-r001-T%-all-config.json"
+                                )
+                            )
+                            for k in updated_map["analysis"].keys():
+                                new_ch["analysis"][k]["usability"] = updated_map[
+                                    "analysis"
+                                ][k]["usability"]
+                    else:
+                        # we get the most updated metadata
+                        start = json.load(
+                            open(
+                                os.path.join(evt_path, "../../inputs/dataprod/runinfo.json")
+                            )
+                        )[period][run]["phy"]["start_key"]
+                        new_ch = metadb.channelmap(start)
+
+                    # we need to retrieve a list of channels that now are ON or AC or OFF
+                    on_dets = []
+                    ac_dets = []
+                    off_dets = []
+                    for k in new_ch["analysis"].keys():
+                        if "PMT" in k or "S" in k:
+                            continue
+                        if (
+                            ch[k]["analysis"]["usability"] in ["ac"]
+                            and new_ch["analysis"][k]["usability"] == "on"
+                        ):
+                            det_id = ch[k]["daq"]["rawid"]
+                            on_dets.append(det_id)
+                        if (
+                            ch[k]["analysis"]["usability"] in ["on"]
+                            and new_ch["analysis"][k]["usability"] == "ac"
+                        ):
+                            det_id = ch[k]["daq"]["rawid"]
+                            ac_dets.append(det_id)
+                        if (
+                            ch[k]["analysis"]["usability"] in ["on", "ac"]
+                            and new_ch["analysis"][k]["usability"] == "off"
+                        ):
+                            det_id = ch[k]["daq"]["rawid"]
+                            off_dets.append(det_id)
+
+                    data = apply_new_usability(
+                        data,
+                        qcs_flag=qcs_flag,
+                        off_dets=off_dets,
+                        ac_dets=ac_dets,
+                        on_dets=on_dets,
+                    )
+
                 if n_max is not None and n > n_max:
                     break
             if n_max is not None and n > n_max:
@@ -398,76 +499,126 @@ def get_data_awkard(
     #            NEW QC -> is_good_hit
     #   - after: OLD QC -> is_good_hit
     #            NEW QC -> is_good_hit_new
+    if data is not None:
+        if "on_multiplicity" not in data["geds"].fields:
+            data["geds", "on_multiplicity"] = ak.sum(data.geds[qcs_flag], axis=-1)
 
-    if "is_good_hit_old" in data["geds"].fields:
-        data["geds", "is_good_hit_new"] = data["geds", "is_good_hit"]
-        data["geds", "is_good_hit"] = data["geds", "is_good_hit_old"]
+        if "is_good_hit_old" in data["geds"].fields:
+            data["geds", "is_good_hit_new"] = data["geds", "is_good_hit"]
+            data["geds", "is_good_hit"] = data["geds", "is_good_hit_old"]
 
     return data
 
 
-def filter_off_ac(
+def apply_new_usability(
     data,
     qcs_flag="is_good_hit",
     ac_dets=[],
     off_dets=[],
+    on_dets=[],
     verbose=False,
-    recompute_qc_flag=True,
 ):
     """
-    Function to remove the hits in off detectors and recompute the QC flag.
-    Also sets some detectors to AC mode:
+    Function to change usability masks by updating the 'wrong' usability mask with a reference one.
     Parameters:
-        -data : awkward array of the data
+        - data : awkward array of the data
+        - old_map (dict) : old usability mask
+        - new_map (dict) : new usability mask
         - qc (str): the quality cut flag
-        - ac_dets (list): list of detector rawid's to set to AC
-        - off_dets (list): list of detector rawids to set off
-        -verbose (bool)
+        - verbose (bool)
     Returns:
         - a new awkward array
-
-    Example of filtering an off detector:
-
-
-
-    }
-
     """
     data["geds", "on_multiplicity"] = ak.sum(data.geds[qcs_flag], axis=-1)
 
-    if verbose:
-        print_events(data, qcs_flag)
-
-    # REMOVE hits in off dets in energy, qc_flag and rawid
-    # ----------------------------------------------------
-    is_off = data.geds.hit_rawid > 0
-    for off_det in off_dets:
-        is_off = is_off & (data.geds.hit_rawid != off_det)
-
-    # we also need to update the QC flag
-    filtered_energy = data["geds"]["energy"][is_off]
-    filtered_is_good_hit = data["geds"][qcs_flag][is_off]
-    filtered_is_good_channel = data["geds"]["is_good_channel"][is_off]
-
-    filtered_hit_rawid = data["geds"]["hit_rawid"][is_off]
-
-    data["geds", "energy"] = filtered_energy
-    data["geds", qcs_flag] = filtered_is_good_hit
-    data["geds", "hit_rawid"] = filtered_hit_rawid
-    data["geds", "is_good_channel"] = filtered_is_good_channel
-
-    data["geds", "multiplicity"] = ak.num(data.geds[qcs_flag], axis=-1)
-    data["geds", "on_multiplicity"] = ak.sum(data.geds[qcs_flag], axis=-1)
+    logger.info("ac->on", on_dets)
+    logger.info("on->ac", ac_dets)
+    logger.info("on,ac->off", off_dets)
 
     if verbose:
-        logger.info("After removing OFF")
+        logger.info("Before changing any status")
         print_events(data, qcs_flag)
 
-    # Recompute is_physical
-    # -----------------------------------------------------
+    if len(on_dets) != 0:
+        # Modify the QC flag so ON dets have is_good_hit true
+        # ---------------------------------------------------
+        # get unphysical/physical flags -> we need to redefine them
+        unphysical_channels_og = data["geds", "unphysical_hit_rawid"]
+        physical_channels_og = data["geds", "is_good_channel"]
+        physical_rawids_og = data["geds", "hit_rawid"]
 
-    if recompute_qc_flag is True:
+        unphysical_channels = unphysical_channels_og
+        physical_channels = [[] for _ in range(len(physical_channels_og))]
+        physical_ids = [[] for _ in range(len(physical_rawids_og))]
 
+        for c in on_dets:
+            # Remove the now-ON detector from unphysical hits
+            unphysical_channels = unphysical_channels[unphysical_channels != c]
+
+            # Add it to the new physical hits
+            for i in range(len(physical_channels_og)):
+                physical_channels[i] = physical_channels_og[i]
+                physical_ids[i] = physical_rawids_og[i]
+
+                if c in physical_rawids_og[i]:
+                    if len(physical_channels_og[i]) == 0:
+                        continue
+                    mod_array = []
+                    for j in range(len(physical_rawids_og[i])):
+                        if physical_rawids_og[i][j] == c:
+                            mod_array.append(True)
+                        else:
+                            mod_array.append(physical_channels_og[i][j])
+                    physical_channels[i] = ak.Array(mod_array)
+
+        # update unphysical rawids
+        data["geds", "unphysical_hit_rawid"] = unphysical_channels
+        # update physical rawids
+        data["geds", "hit_rawid"] = physical_ids
+        # update is_good
+        data["geds", "is_good_channel"] = physical_channels
+        # update the qcs
+        num_bad_channels = ak.num(unphysical_channels, axis=-1)
+        is_physical_recomputed = num_bad_channels == 0
+        data["geds", qcs_flag] = (
+            is_physical_recomputed & data["geds", "is_good_channel"]
+        )
+
+        data["geds", "multiplicity"] = ak.num(data.geds[qcs_flag], axis=-1)
+        data["geds", "on_multiplicity"] = ak.sum(data.geds[qcs_flag], axis=-1)
+
+        if verbose:
+            logger.info("After changing ON detectors")
+            print_events(data, qcs_flag)
+
+    if len(off_dets) != 0:
+        # REMOVE hits in off dets in energy, qc_flag and rawid
+        # ----------------------------------------------------
+        is_off = data.geds.hit_rawid > 0
+        for off_det in off_dets:
+            is_off = is_off & (data.geds.hit_rawid != off_det)
+
+        # we also need to update the QC flag
+        filtered_energy = data["geds"]["energy"][is_off]
+        filtered_is_good_hit = data["geds"][qcs_flag][is_off]
+        filtered_is_good_channel = data["geds"]["is_good_channel"][is_off]
+
+        filtered_hit_rawid = data["geds"]["hit_rawid"][is_off]
+
+        data["geds", "energy"] = filtered_energy
+        data["geds", qcs_flag] = filtered_is_good_hit
+        data["geds", "hit_rawid"] = filtered_hit_rawid
+        data["geds", "is_good_channel"] = filtered_is_good_channel
+
+        data["geds", "multiplicity"] = ak.num(data.geds[qcs_flag], axis=-1)
+        data["geds", "on_multiplicity"] = ak.sum(data.geds[qcs_flag], axis=-1)
+
+        if verbose:
+            logger.info("After removing OFF detectors")
+            print_events(data, qcs_flag)
+
+        # Recompute is_physical
+        # -----------------------------------------------------
         unphysical_channels = data["geds", "unphysical_hit_rawid"]
 
         for c in off_dets:
@@ -481,36 +632,33 @@ def filter_off_ac(
             is_physical_recomputed & data["geds", "is_good_channel"]
         )
 
-    data["geds", "multiplicity"] = ak.num(data.geds[qcs_flag], axis=-1)
-    data["geds", "on_multiplicity"] = ak.sum(data.geds[qcs_flag], axis=-1)
+        data["geds", "multiplicity"] = ak.num(data.geds[qcs_flag], axis=-1)
+        data["geds", "on_multiplicity"] = ak.sum(data.geds[qcs_flag], axis=-1)
 
-    if verbose:
-        logger.info("After fixing QC flag")
-        print_events(data, qcs_flag)
+        if verbose:
+            logger.info("After fixing QC flag")
+            print_events(data, qcs_flag)
 
     # Modify the QC flag so AC dets have is_good_hit false
     # ---------------------------------------------------
+    if len(ac_dets) != 0:
+        cut = data.geds.hit_rawid > 0
+        for ac in ac_dets:
+            cut = cut & (data.geds.hit_rawid != ac)
 
-    cut = data.geds.hit_rawid > 0
-    for ac in ac_dets:
-        cut = cut & (data.geds.hit_rawid != ac)
+        filtered_is_good_hit = data["geds"][qcs_flag] & (cut)
+        filtered_is_good_channel = data["geds"]["is_good_channel"] & (cut)
 
-    filtered_is_good_hit = data["geds"][qcs_flag] & (cut)
-    filtered_is_good_channel = data["geds"]["is_good_channel"] & (cut)
+        data["geds", qcs_flag] = filtered_is_good_hit
+        data["geds", "is_good_channel"] = filtered_is_good_channel
 
-    data["geds", qcs_flag] = filtered_is_good_hit
-    data["geds", "is_good_channel"] = filtered_is_good_channel
+        data["geds", "multiplicity"] = ak.num(data.geds[qcs_flag], axis=-1)
+        data["geds", "on_multiplicity"] = ak.sum(data.geds[qcs_flag], axis=-1)
 
-    data["geds", "multiplicity"] = ak.num(data.geds[qcs_flag], axis=-1)
-    data["geds", "on_multiplicity"] = ak.sum(data.geds[qcs_flag], axis=-1)
+        if verbose:
+            logger.info("After changing AC detectors")
 
-    if verbose:
-        logger.info("After changing ACs")
-        print_events(data, qcs_flag)
-
-    # recompute the multiplicity
-    data["geds", "multiplicity"] = ak.num(data.geds[qcs_flag], axis=-1)
-    data["geds", "on_multiplicity"] = ak.sum(data.geds[qcs_flag], axis=-1)
+            print_events(data, qcs_flag)
 
     return data
 
@@ -541,6 +689,16 @@ def main():
         description="Script to load the data for the LEGEND-200 background model"
     )
     parser.add_argument(
+        "--cluster",
+        default="legend-login",
+        help="Name of the cluster you are working at (avauilable: legend-login, nersc)",
+    )
+    parser.add_argument(
+        "--version",
+        default="ref-v1.0.1",
+        help="Reference production data version, e.g. ref-v1.0.0",
+    )
+    parser.add_argument(
         "--output", help="Name of output root file, eg l200a-p10-r000-dataset-tmp-auto"
     )
     parser.add_argument("--p", help="List of periods to inspect")
@@ -554,23 +712,41 @@ def main():
         help="Set to 'new' if you want to apply new cuts (post Vancouver CM), otherwise default value is set to 'old' cuts",
     )
     parser.add_argument(
-        "--recompute",
-        default=False,
-        help="Boolean flag set to True if you want to recompute the QC flag after setting OFF detectors",
-    )
-    parser.add_argument(
         "--target",
         default=None,
         help="Target cycle up to which include data; use format '20240317T141137Z.",
     )
 
     args = parser.parse_args()
+    cluster = args.cluster
+    if "p10" in args.p:
+        global_path = (
+            "/global/cfs/cdirs/m2676/users/calgaro/legend-bkg-scripts/sync_from_lngs/"
+        )
+    else:
+        global_path = (
+            "/global/cfs/cdirs/m2676/data/lngs/l200/public/prodenv-new/prod-blind"
+            if cluster == "nersc"
+            else "/data2/public/prodenv/prod-blind"
+        )
     usability_path = "cfg/usability_changes.json"
-    config_path = "/data1/users/tdixon/build_pdf/legend-simflow-config/tier/pdf/l200a/build-pdf-config.json"
-    xtc_folder = "/data1/users/tdixon/build_pdf/cross_talk"
-    bad_keys_path = "/data1/users/calgaro/legend-dataflow-config/ignore_keys.keylist"
-    recompute_qc_flag = args.recompute
+    config_path = (
+        "/global/cfs/cdirs/m2676/users/calgaro/legend-bkg-scripts/pdf-l200a/build-pdf-config.json"
+        if cluster == "nersc"
+        else "/data1/users/tdixon/build_pdf/legend-simflow-config/tier/pdf/l200a/build-pdf-config.json"
+    )
+    xtc_folder = (
+        "/global/cfs/cdirs/m2676/users/calgaro/legend-bkg-scripts/cross_talk"
+        if cluster == "nersc"
+        else "/global/cfs/cdirs/m2676/users/calgaro/legend-bkg-scripts/cross_talk"
+    )
+    bad_keys_path = (
+        "/global/cfs/cdirs/m2676/users/calgaro/legend-bkg-scripts/updated_metadata/ignore_keys.keylist"
+        if cluster == "nersc"
+        else "/global/cfs/cdirs/m2676/users/calgaro/legend-bkg-scripts/updated_metadata/ignore_keys.keylist"
+    )
     target_key = args.target
+    prodenv_version = args.version
 
     # read bad-keys
     bad_list = []
@@ -585,27 +761,31 @@ def main():
     paths_cfg = {
         "p03": {
             "tier": "pet",
-            "evt_path": "/data2/public/prodenv/prod-blind/ref-v1.0.0/generated/tier/",
+            "evt_path": os.path.join(global_path, prodenv_version, "generated/tier/"),
         },
         "p04": {
             "tier": "pet",
-            "evt_path": "/data2/public/prodenv/prod-blind/ref-v1.0.0/generated/tier/",
+            "evt_path": os.path.join(global_path, prodenv_version, "generated/tier/"),
         },
         "p06": {
             "tier": "pet",
-            "evt_path": "/data2/public/prodenv/prod-blind/ref-v1.0.0/generated/tier/",
+            "evt_path": os.path.join(global_path, prodenv_version, "generated/tier/"),
         },
         "p07": {
             "tier": "pet",
-            "evt_path": "/data2/public/prodenv/prod-blind/ref-v1.0.0/generated/tier/",
+            "evt_path": os.path.join(global_path, prodenv_version, "generated/tier/"),
         },
         "p08": {
             "tier": "pet",
-            "evt_path": "/data2/public/prodenv/prod-blind/ref-v1.0.0/generated/tier/",
+            "evt_path": os.path.join(global_path, prodenv_version, "generated/tier/"),
+        },
+        "p09": {
+            "tier": "pet",
+            "evt_path": os.path.join(global_path, prodenv_version, "generated/tier/"),
         },
         "p10": {
             "tier": "evt",
-            "evt_path": "/data2/public/prodenv/prod-blind/tmp-auto/generated/tier/",
+            "evt_path": os.path.join(global_path, "tmp-auto", "generated/tier/"),
         },
     }
 
@@ -624,10 +804,15 @@ def main():
 
     with Path(usability_path).open() as f:
         usability = json.load(f)
+
     # get the metadata information / mapping
     # --------------------------------------
     logger.info("... get the metadata information / mapping")
-    metadb = LegendMetadata("/data2/public/prodenv/prod-blind/tmp-auto/inputs")
+    metadb = (
+        LegendMetadata(f"{global_path}/tmp-auto/inputs")
+        if "p10" in periods
+        else LegendMetadata(f"{global_path}/{prodenv_version}/inputs")
+    )
     chmap = metadb.channelmap(rconfig["timestamp"])
 
     geds_mapping = {
@@ -650,17 +835,31 @@ def main():
 
     # analysis runs
     runs = metadb.dataprod.config.analysis_runs
-    runs["p10"] = ["r004"]
+    runs["p10"] = ["r000", "r001", "r003", "r004", "r005", "r006"]  # no r002
+    logger.info("The following data are available:\n", runs, "\n")
 
     os.makedirs("outputs", exist_ok=True)
     output_cache = f"outputs/{out_name.replace('.root', '.parquet')}"
 
+    qcs_flag = "is_good_hit" if args.qc == "old" else "is_good_hit_new"
+
     if os.path.exists(output_cache) and process_evt is False:
         logger.info("Get from parquet")
         data = ak.from_parquet(output_cache)
+
+        # redefine usabilities if necessary
+        data = apply_new_usability(
+            data,
+            qcs_flag=qcs_flag,
+            off_dets=usability["ac_to_off"] if "ac_to_off" in usability.keys() else [],
+            ac_dets=usability["ac"] if "ac" in usability.keys() else [],
+            on_dets=usability["on"] if "on" in usability.keys() else [],
+        )
+
     else:
-        data = get_data_awkard(
+        data = get_data_awkward(
             cfg=paths_cfg,
+            qcs_flag=qcs_flag,
             periods=periods,
             target_key=target_key,
             n_max=None,
@@ -670,28 +869,21 @@ def main():
         )
         ak.to_parquet(data, output_cache)
 
-    # Add cuts on bad channels
     # ---------------------------------------------------------------------
-    # For ON->AC this is just another cut
-    # FOR ON/AC -> OFF we need to modify the geds.energy geds.hit_rawid and geds.is_good_hit,
-    # to remove this hits, we then need to modify mulitplicity
-    qcs_flag = "is_good_hit" if args.qc == "old" else "is_good_hit_new"
-
-    data = filter_off_ac(
-        data,
-        qcs_flag=qcs_flag,
-        off_dets=usability["ac_to_off"],
-        ac_dets=usability["ac"],
-    )
-
-    # and the usual cuts
+    # apply cuts
     data = data[
         (~data.trigger.is_forced)  # no forced triggers
         & (~data.coincident.puls)  # no pulser eventsdata
-        & (~data.coincident.muon)  # no muons
         & (data.geds.multiplicity > 0)  # no purely lar triggered events
         & (ak.all(data.geds[qcs_flag], axis=-1))
     ]
+
+    # muon flag: no evt flag in tmp-auto, loads the usual MUON01
+    if prodenv_version == "tmp-auto":
+        data = data[(~data.coincident.muon)]
+    # no muons (as reconstructed offline)
+    else:
+        data = data[(~data.coincident.muon_offline)]
 
     if np.all(data["geds", "multiplicity"] == ak.num(data["geds", "energy"])) is False:
         raise ValueError(
@@ -796,7 +988,7 @@ def main():
 
     # Now start filling histograms
     # ----------------------------
-    logger.info(f"... fill histos")
+    logger.info("... fill histos")
 
     globs = {"ak": ak, "np": np}
 
@@ -909,7 +1101,7 @@ def main():
                         )
                         _corrected_energy_array.append(energies_corrected)
                     else:
-                        raise ValueError("Error: cross talk correction didnt work")
+                        raise ValueError("Error: cross talk correction didn't work")
 
                 if len(_corrected_energy_array) > 0:
                     _summed_energy_array = np.sum(_corrected_energy_array, axis=1)
@@ -1002,7 +1194,7 @@ def main():
 
     # write the hists to file (but only if they have none zero entries)
     # Changes the names to drop type_ etc
-    logger.info(f"... save histos")
+    logger.info("... save histos")
     out_file = uproot.recreate("outputs/" + out_name)
     for _cut_name, _hist_dict in hists.items():
         dir = out_file.mkdir(_cut_name)
@@ -1019,7 +1211,7 @@ def main():
             dir[name] = _hist
 
     out_file.close()
-    logger.info(f"... done!")
+    logger.info("... done!")
 
 
 if __name__ == "__main__":
