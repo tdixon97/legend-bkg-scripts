@@ -2,6 +2,7 @@ cross_talk/*
 bat_outputs/*
 *.parquet
 outputs/*
+time_outputs/*
 *.root
 # Byte-compiled / optimized / DLL files
 __pycache__/
