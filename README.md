@@ -1,5 +1,7 @@
 # legend-bkg-scripts
 Python scripts for looking at the LEGEND background data.
+Authors:
+Elisebetta Bosio, Sofia Calgaro, Toby Dixon
 
 Currently there is:
 

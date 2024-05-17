@@ -156,7 +156,7 @@ runs = metadb.dataprod.config.analysis_runs
 
 # hardcoded for now
 if include_p10:
-    runs["p10"] = ["r000", "r001",  "r003","ro004","r005","r006"]
+    runs["p10"] = ["r000", "r001", "r003","r004","r005","r006"]
 
 run_times = utils.get_run_times(metadb, runs, verbose=1)
 
