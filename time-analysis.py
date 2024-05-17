@@ -2,7 +2,6 @@
 time-analysis.py
 Authors: Toby Dixon and Sofia Calgaro
 """
-from legend_plot_style import LEGENDPlotStyle as lps
 
 import argparse
 import copy
@@ -15,9 +14,9 @@ import pandas as pd
 import tol_colors as tc
 import uproot
 from hist import Hist
+from legend_plot_style import LEGENDPlotStyle as lps
 from legendmeta import LegendMetadata
 from matplotlib.backends.backend_pdf import PdfPages
-from legend_plot_style import LEGENDPlotStyle as lps
 
 import utils
 
@@ -116,7 +115,7 @@ average = args.average
 include_p10 = True
 
 logger.info(f"RUnning the analysis with {input} to {output}")
-  
+
 if input_p10 is None:
     include_p10 = False
 
@@ -156,7 +155,7 @@ runs = metadb.dataprod.config.analysis_runs
 
 # hardcoded for now
 if include_p10:
-    runs["p10"] = ["r000", "r001", "r003","r004","r005","r006"]
+    runs["p10"] = ["r000", "r001", "r003", "r004", "r005", "r006"]
 
 run_times = utils.get_run_times(metadb, runs, verbose=1)
 
@@ -174,7 +173,7 @@ hist_tot_p10 = None
 # extract the data and start / stop times
 # ----------------------------------------
 
-periods = ["p03", "p04", "p06", "p07", "p08","p09"]
+periods = ["p03", "p04", "p06", "p07", "p08", "p09"]
 if include_p10:
     periods.append("p10")
 
@@ -291,20 +290,20 @@ for period in periods:
                         f" {energy_low} to {energy_high} keV {period}-{run}",
                     )
 
-logger.info(".....got count rates");
+logger.info(".....got count rates")
 # and for the total
 if subtract is False:
     c_tmp = utils.integrate_hist(hist_tot, energy_list)
     error = utils.get_error_bar(c_tmp)
     counts_total = (c_tmp, error[0], error[1])
     posterior = error[2]
-    if (include_p10):
+    if include_p10:
         c_tmp = utils.integrate_hist(hist_tot_p10, energy_list)
         error_p10 = utils.get_error_bar(c_tmp)
         counts_total_p10 = (c_tmp, error_p10[0], error_p10[1])
         posterior_p10 = error_p10[2]
 else:
-    if (include_p10):
+    if include_p10:
         counts_total_p10, posterior_p10 = utils.sideband_counting(
             hist_tot_p10,
             energy_low - 15,
@@ -351,10 +350,10 @@ if include_p10:
 total_exposure = 0
 total_exposure_p10 = 0
 
-period_times={}
+period_times = {}
 for period in periods:
     run_list = runs[period]
-    period_times[period]=[np.inf,0]
+    period_times[period] = [np.inf, 0]
     for run in run_list:
         if run not in run_times[period]:
             continue
@@ -374,11 +373,11 @@ for period in periods:
                 ey_low.append(counts[period][run][1] / (norm * mass))
                 ey_high.append(counts[period][run][2] / (norm * mass))
 
-                if (tstop/60/60/24 > period_times[period][1]):
-                    period_times[period][1]=tstop/60/60/24
-                if (tstart/60/60/24 < period_times[period][0]):
-                    period_times[period][0]=tstart/60/60/24
-                    
+                if tstop / 60 / 60 / 24 > period_times[period][1]:
+                    period_times[period][1] = tstop / 60 / 60 / 24
+                if tstart / 60 / 60 / 24 < period_times[period][0]:
+                    period_times[period][0] = tstart / 60 / 60 / 24
+
             total_exposure += (tstop / 60 / 60 / 24 - tstart / 60 / 60 / 24) * mass
 
         # same for p10
@@ -496,18 +495,20 @@ else:
             label="No OB",
         )
     else:
-         axes_full.errorbar(
+        axes_full.errorbar(
             x=x,
-	    y=y,
+            y=y,
             yerr=[np.abs(ey_low), np.abs(ey_high)],
-	    color=vset.blue,
+            color=vset.blue,
             fmt="o",
             ecolor="grey",
         )
 
 for p in period_times:
-    axes_full.axvspan(xmin=period_times[p][0],xmax=period_times[p][1],color="grey",alpha=0.2)
-   
+    axes_full.axvspan(
+        xmin=period_times[p][0], xmax=period_times[p][1], color="grey", alpha=0.2
+    )
+
 axes_full.set_xlabel("Time [days]")
 axes_full.set_ylabel("Counts / kg -day")
 if include_p10:
@@ -517,7 +518,7 @@ axes_full.set_title(f"{e_str} keV")
 
 # set x ranges for bands
 end_p8 = x[-1]
-if (include_p10):
+if include_p10:
     start_p10 = x_p10[0]
     end_p10 = x_p10[-1]
     axes_full.set_xlim(-2, end_p10 + 20)
@@ -575,36 +576,41 @@ plt.savefig("plots/" + out_name[0:-5] + ".pdf")
 # ------------------------------------------------
 
 counts_samples = utils.sample_hist(posterior, n=int(1e6))
-if (include_p10):
+if include_p10:
     counts_p10_samples = utils.sample_hist(posterior_p10, n=int(1e6))
 
 rates = counts_samples / total_exposure
-if (include_p10):
+if include_p10:
     rates_p10 = counts_p10_samples / total_exposure_p10
     div = rates_p10 / rates
 
 histo_div = Hist.new.Reg(2000, 0, 1.5).Double()
-if (include_p10):
+if include_p10:
     histo = Hist.new.Reg(2000, 0, max(max(rates), max(rates_p10))).Double()
 else:
     histo = Hist.new.Reg(2000, 0, max(rates)).Double()
 
-if (include_p10):
+if include_p10:
     histo_p10 = Hist.new.Reg(2000, 0, max(max(rates), max(rates_p10))).Double()
 
 histo.fill(rates)
-if (include_p10):
+if include_p10:
     histo_p10.fill(rates_p10)
     histo_div.fill(div)
-    
+
 fig, axes_full = lps.subplots(1, 1, figsize=(4, 3), sharex=True)
 
 histo.plot(
     ax=axes_full, **style, histtype="fill", alpha=0.4, color=vset.blue, label="With OB"
 )
-if (include_p10):
+if include_p10:
     histo_p10.plot(
-        ax=axes_full, **style, histtype="fill", alpha=0.4, color=vset.orange, label="No OB"
+        ax=axes_full,
+        **style,
+        histtype="fill",
+        alpha=0.4,
+        color=vset.orange,
+        label="No OB",
     )
 
 axes_full.set_xlabel("counts/kg/day")
@@ -614,7 +620,7 @@ axes_full.set_title(f"{e_str} keV")
 
 plt.savefig("plots/" + out_name[0:-5] + "_posterior.pdf")
 
-if (include_p10):
+if include_p10:
     fig, axes_full = lps.subplots(1, 1, figsize=(4, 3), sharex=True)
     histo_div.plot(ax=axes_full, **style, color=vset.blue, histtype="fill", alpha=0.4)
     axes_full.set_xlabel("rate (p10)/rate (p3-p8)")
@@ -622,24 +628,24 @@ if (include_p10):
 
 # now the summary stats
 w, x = histo.to_numpy()
-if (include_p10):
+if include_p10:
     w_p10, x_p10 = histo_p10.to_numpy()
 w_div, x_div = histo_div.to_numpy()
 
 best_fit = x[np.argmax(w)]
-if (include_p10):
+if include_p10:
     best_fit_p10 = x_p10[np.argmax(w_p10)]
 best_div = x_div[np.argmax(w_div)]
 
 errors = utils.get_smallest_ci(best_fit, x, w)
-if (include_p10):
+if include_p10:
     errors_p10 = utils.get_smallest_ci(best_fit_p10, x_p10, w_p10)
 errors_div = utils.get_smallest_ci(best_div, x_div, w_div)
 
 logger.info(
     f"For p3-8 rate  = {best_fit:.3g} + {errors[1]:.2g} - {errors[0]:.2g} cts/kg/yr"
 )
-if (include_p10):
+if include_p10:
     logger.info(
         f"For p10 rate   = {best_fit_p10:.3g} + {errors_p10[1]:.2g} - {errors_p10[0]:.2g} cts/kg/day"
     )
