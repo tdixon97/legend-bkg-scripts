@@ -139,9 +139,14 @@ def get_data_awkard(
 
     logger.debug(evt_path + "/" + tier + f"/phy/{period}/{run}/")
 
-    fl_evt = glob.glob(evt_path + "/" + tier + f"/phy/l200-{period}-{run}-phy-tier_pet.lh5")
+    if (os.path.exists(evt_path + "/" + tier + f"/phy/l200-{period}-{run}-phy-tier_pet.lh5")):
+        fl_evt = glob.glob(evt_path + "/" + tier + f"/phy/l200-{period}-{run}-phy-tier_pet.lh5")
+    else:
+        fl_evt = glob.glob(evt_path + "/" + tier + f"/phy/{period}/{run}/*")
 
-    for f_evt in fl_evt:
+    for idx,f_evt in enumerate(fl_evt):
+        if (idx%50==0):
+            logger.debug(f"Reading >>> {f_evt} ({idx} out of {len(fl_evt)})")
 
         d_evt = lh5.read_as("evt", f_evt, library="ak")
         d_evt["period"] = period
@@ -160,11 +165,13 @@ def main():
     )
     parser.add_argument("--p", help="List of periods to inspect")
   
+    parser.add_argument("--c", help="Cycle to use")
 
     args = parser.parse_args()
+    cycle= args.c
     config_path = "cfg/build-pdf-config.json"
-    prod_cycle = "/data2/public/prodenv/prod-blind/ref-v1.1.0/"
-    meta_path  = "/data2/public/prodenv/prod-blind/ref-v1.1.0/inputs/"
+    prod_cycle = f"/data2/public/prodenv/prod-blind/{cycle}/"
+    meta_path  = f"/data2/public/prodenv/prod-blind/{cycle}/inputs/"
     paths_cfg = {
         "p03": {
             "tier": "pet",
@@ -210,7 +217,7 @@ def main():
     # get the metadata information / mapping
     # --------------------------------------
     logger.info("... get the metadata information / mapping")
-    metadb = LegendMetadata()
+    metadb = LegendMetadata(f"/data2/public/prodenv/prod-blind/{cycle}/inputs/")
     chmap = metadb.channelmap(rconfig["timestamp"])
 
     geds_mapping = {
@@ -228,13 +235,19 @@ def main():
         for _name, _dict in chmap.items()
         if chmap[_name]["system"] == "geds"
     }
+    geds_types = {
+        f"ch{_dict['daq']['rawid']}": _dict["type"]
+        for _name, _dict in chmap.items()
+        if chmap[_name]["system"] == "geds"
+    }
     channel2string = get_vectorised_converter(geds_strings)
     channel2position = get_vectorised_converter(geds_positions)
+    channel2type = get_vectorised_converter(geds_types)
 
     # analysis runs
     runs = metadb.dataprod.runinfo
     logger.info("... create the histos to fill (full period)")
-
+    run_hist_list=["","_icpc","_bege","_ppc","_coax"]
     hists = {}
     for _cut_name in rconfig["cuts"]:
         if not rconfig["cuts"][_cut_name]["is_sum"]:
@@ -258,20 +271,22 @@ def main():
             for _period, _run_list in runs.items():
 
                 for run in _run_list:
-                    hist_name = f"{_cut_name}_{_period}_{run}"
-                    hist_title = f"{_period} {run} energy deposits"
-                    nbins = rconfig["hist"]["nbins"]
-                    emin = rconfig["hist"]["emin"]
-                    emax = rconfig["hist"]["emax"]
-                    run_hists[_cut_name][f"{_period}_{run}"] = ROOT.TH1F(
-                        hist_name, hist_title, nbins, emin, emax
-                    )
+                    for name in run_hist_list:
+                        hist_name = f"{_cut_name}_{_period}_{run}{name}"
+                        hist_title = f"{_period} {run} energy deposits"
+                        nbins = rconfig["hist"]["nbins"]
+                        emin = rconfig["hist"]["emin"]
+                        emax = rconfig["hist"]["emax"]
+                        run_hists[_cut_name][f"{_period}_{run}{name}"] = ROOT.TH1F(
+                            hist_name, hist_title, nbins, emin, emax
+                        )
                     
 
     sum_hists = {}
     string_diff = np.arange(7)
     names_m2 = [f"sd_{item1}" for item1 in string_diff]
     names_m2.extend(["all", "cat_1", "cat_2", "cat_3"])
+    names_m2.extend(["e1_icpc", "e1_bege", "e1_ppc", "e2_coax"])
 
     # now the summed histos
     for _cut_name in rconfig["cuts"]:
@@ -337,7 +352,8 @@ def main():
         for run in _run_list:
             if "phy" not in runs[period][run]:
                 continue
-
+            if (period == "p10" and run =="r002"):
+                continue
             data = get_data_awkard(
                 cfg=paths_cfg,
                 period=period,
@@ -360,6 +376,7 @@ def main():
                 & data.geds["quality"][evt_quality_flag]
             ]
 
+            data["pass_psd"]=ak.all(data.geds.psd.is_bb_like, axis=-1)
 
             for _cut_name, _cut_dict in rconfig["cuts"].items():
                 _cut_string = _cut_dict["cut_string"]
@@ -386,23 +403,23 @@ def main():
                         )
 
 
-                    # fill also time dependent hists
+                        # fill also time dependent hists
 
-                    for run in _run_list:
-                        _energy_array = ak.flatten(data[
-                            eval(_cut_string, globs, data)
-                            & (data["period"] == period)
-                            & (data["run"]==run)
-                        ]["geds"][energy_name],axis=-1).to_numpy().astype(np.float64)
-
-
-                        if len(_energy_array) == 0:
-                            continue
-                        run_hists[_cut_name][f"{period}_{run}"].FillN(
-                            len(_energy_array),
-                            _energy_array,
-                            np.ones(len(_energy_array)),
-                        )
+                        for run in _run_list:
+                            for name_run_hist in run_hist_list:
+                                if (name_run_hist==""):
+                                    run_hists[_cut_name][f"{period}_{run}"].FillN(
+                                        len(_energy_array),
+                                        _energy_array,
+                                        np.ones(len(_energy_array)),
+                                    )
+                                else:
+                                    if (chmap[geds_mapping[_channel_id]]["type"] in name_run_hist):
+                                        run_hists[_cut_name][f"{period}_{run}{name_run_hist}"].FillN(
+                                            len(_energy_array),
+                                            _energy_array,
+                                            np.ones(len(_energy_array)),
+                                        )
 
                 elif (
                     "is_2d" not in _cut_dict
@@ -422,15 +439,15 @@ def main():
                         np.ones(len(_summed_energy_array)),
                     )
 
-                # cross talk correct
                 else:
-                    # this is likely to be pretty slow, we can try to make something faster but id need to think about it
                     _mult_energy_array = data[
                         eval(_cut_string, globs, data) & (data["period"] == period)
                     ]["geds"][energy_name]
                     _mult_channel_array = data[
                         eval(_cut_string, globs, data) & (data["period"] == period)
-                    ]["geds"][rawid_name].to_numpy()
+                    ]["geds"][rawid_name][ak.argsort(_mult_energy_array, axis=-1)].to_numpy()
+
+                    
                     # apply the category selection
 
                     _corrected_energy_1 = _mult_energy_array[_mult_energy_array==ak.min(_mult_energy_array,axis=-1)].to_numpy().astype(np.float64)
@@ -441,7 +458,7 @@ def main():
                     for name in names_m2:
 
                         # select the right events
-                        if name != "all":
+                        if name != "all" and "e1" not in name:
                             categories = get_m2_categories(
                                 _mult_channel_array, channel2string, channel2position
                             )
@@ -472,6 +489,15 @@ def main():
                                 ]
 
                         # all case
+                        elif "e1" in name:
+                            e1_rawid = _mult_channel_array[:, 1]
+                            types = channel2type(e1_rawid)
+                            ids = np.where(types == name.split("_")[1])
+                            _corrected_energy_1_tmp = np.array(_corrected_energy_1)[ids]
+                            _corrected_energy_1_tmp = np.array(_corrected_energy_2)[ids]
+                            _summed_energy_array_tmp = np.array(_summed_energy_array)[
+                                    ids
+                                ]
                         else:
                             _corrected_energy_1_tmp = np.array(_corrected_energy_1)
                             _corrected_energy_2_tmp = np.array(_corrected_energy_2)
@@ -484,20 +510,14 @@ def main():
                         _corrected_energy_1_tmp = np.array(_corrected_energy_1_tmp)
                         _corrected_energy_2_tmp = np.array(_corrected_energy_2_tmp)
 
-                      
-                        if "is_2d" in _cut_dict:
-                            sum_hists[_cut_name][name].FillN(
-                                len(_corrected_energy_1_tmp),
-                                _corrected_energy_1_tmp,
-                                _corrected_energy_2_tmp,
-                                np.ones(len(_summed_energy_array_tmp)),
-                            )
-                        else:
-                            sum_hists[_cut_name][name].FillN(
-                                len(_summed_energy_array_tmp),
-                                _summed_energy_array_tmp,
-                                np.ones(len(_summed_energy_array_tmp)),
-                            )
+                    
+                        sum_hists[_cut_name][name].FillN(
+                            len(_corrected_energy_1_tmp),
+                            _corrected_energy_1_tmp,
+                            _corrected_energy_2_tmp,
+                            np.ones(len(_summed_energy_array_tmp)),
+                        )
+                        
 
     for _cut_name in hists:
         hists[_cut_name]["all"] = ROOT.TH1F(

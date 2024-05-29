@@ -8,7 +8,11 @@
 		"emax": 6000
 	},
 	"cuts": {
-
+		"hit": {
+			"cut_string": "True",
+			"description": "",
+			"is_sum": true
+		},
 		"raw": {
 			"cut_string": "True",
 			"description": "",
@@ -49,6 +53,16 @@
 		},
 		"lar_fail":{
 			"cut_string": "(mul == 1) and (coincident.spms == True)",
+			"description": "",
+			"is_sum": false
+		},
+		"psd_surv":{
+			"cut_string": "(mul == 1) and (coincident.spms == False) and pass_psd",
+			"description": "",
+			"is_sum": false
+		},
+		"psd_fail":{
+			"cut_string": "(mul == 1) and (coincident.spms == False) and ~pass_psd",
 			"description": "",
 			"is_sum": false
 		}
