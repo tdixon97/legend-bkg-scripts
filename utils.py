@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 
 import json
 
+
 plt.style.use(legendstyles.LEGEND)
 
 def number2name(meta:LegendMetadata,number:str)->str:
@@ -404,17 +405,33 @@ def sample_hist(hist, n):
     return sampled_values
 
 
-def get_exposure(group:list,periods:list=["p03","p04","p06","p07","p08","p09"])->float:
+def get_psd_usable(period,ch,detector):
+
+    use= ((((ch[detector]["analysis"]["psd"]["is_bb_like"]  == "low_aoe & high_aoe")
+                                and ch[detector]["analysis"]["psd"]["status"]["low_aoe"] == "valid"
+                                and ch[detector]["analysis"]["psd"]["status"]["high_aoe"] == "valid"
+                               ) or 
+                            (((ch[detector]["analysis"]["psd"]["is_bb_like"]  == "low_aoe & lq")
+                                  and ch[detector]["analysis"]["psd"]["status"]["low_aoe"] == "valid"
+                                    and ch[detector]["analysis"]["psd"]["status"]["lq"] == "valid"
+                            ) and period in ["p08","p09"]  
+                                 )
+                               ) and (ch[detector]["analysis"]["usability"] == 'on'))
+
+    return use
+      
+def get_exposure(group:list,periods:list=["p03","p04","p06","p07","p08","p09"],psd_usable:bool=False)->float:
     """
     Get the livetime for a given group a list of strs of channel names or detector types or "all"
     Parameters:
         group: list of str
         periods: list of periods to consider default is 3,4,6,7 (vancouver dataset)
+        psd_use: get exposure usable for psd (a subset)
     Returns:
         - a float of the exposure (summed over the group)
     """
 
-    meta = LegendMetadata("../legend-metadata")
+    meta = LegendMetadata("../LEGEND/legend-metadata")
 
     analysis_runs=meta.dataprod.config.analysis_runs
     ### also need the channel map
@@ -436,13 +453,21 @@ def get_exposure(group:list,periods:list=["p03","p04","p06","p07","p08","p09"])-
                 for i in range(len(group)):
                     item =group[i]
 
-                    if item=="all":
-                        geds_list= [ _name for _name, _dict in ch.items() if ch[_name]["system"] == "geds" and ch[_name]["analysis"]["usability"] in ["on","no_psd"]]
-                    elif ((item=="bege")or(item=="icpc")or (item=="coax")or (item=="ppc")):
-                        geds_list= [ _name for _name, _dict in ch.items() if ch[_name]["system"] == "geds" and ch[_name]["type"]==item and ch[_name]["analysis"]["usability"] in ["on","no_psd"]]
-                    else:
-                        geds_list= [ _name for _name, _dict in ch.items() if ch[_name]["system"] == "geds" and f"ch{ch[_name]['daq']['rawid']}"==item and ch[_name]["analysis"]["usability"] in ["on","no_psd"]]
+                    if (psd_usable is False):
+                        if item=="all":
+                            geds_list= [ _name for _name, _dict in ch.items() if ch[_name]["system"] == "geds" and ch[_name]["analysis"]["usability"] in ["on","no_psd"]]
+                        elif ((item=="bege")or(item=="icpc")or (item=="coax")or (item=="ppc")):
+                            geds_list= [ _name for _name, _dict in ch.items() if ch[_name]["system"] == "geds" and ch[_name]["type"]==item and ch[_name]["analysis"]["usability"] in ["on","no_psd"]]
+                        else:
+                            geds_list= [ _name for _name, _dict in ch.items() if ch[_name]["system"] == "geds" and f"ch{ch[_name]['daq']['rawid']}"==item and ch[_name]["analysis"]["usability"] in ["on","no_psd"]]
 
+                    else:
+                        if item=="all":
+                            geds_list= [ _name for _name, _dict in ch.items() if ch[_name]["system"] == "geds" and get_psd_usable(period,ch,_name) is True]
+                        elif ((item=="bege")or(item=="icpc")or (item=="coax")or (item=="ppc")):
+                            geds_list= [ _name for _name, _dict in ch.items() if ch[_name]["system"] == "geds" and ch[_name]["type"]==item and get_psd_usable(period,ch,_name) is True]
+                        else:
+                            geds_list= [ _name for _name, _dict in ch.items() if ch[_name]["system"] == "geds" and f"ch{ch[_name]['daq']['rawid']}"==item and get_psd_usable(period,ch,_name) is True]
 
                     ## loop over detectors
                     for det in geds_list:
@@ -477,7 +502,7 @@ def get_channels_map():
         
     """
 
-    meta = LegendMetadata("../legend-metadata/")
+    meta = LegendMetadata("../LEGEND/legend-metadata/")
  
     ### 1st July should be part of TAUP dataset
     time = datetime(2023, 7, 1, 00, 00, 00, tzinfo=timezone.utc)
@@ -538,7 +563,7 @@ def number2name(meta:LegendMetadata,number:str)->str:
 
 
 
-def get_det_types(group_type:str,string_sel:int=None,det_type_sel:str=None,level_groups:str="cfg/level_groups_Sofia.json"):
+def get_det_types(group_type:str,string_sel:int=None,det_type_sel:str=None,level_groups:str="cfg/level_groups_Sofia.json",psd_usable:bool=False):
     """
     Extract a dictonary of detectors in each group
 
@@ -569,20 +594,31 @@ def get_det_types(group_type:str,string_sel:int=None,det_type_sel:str=None,level
 
 
     ### extract the meta data
-    meta = LegendMetadata("../legend-metadata")
+    meta = LegendMetadata("../LEGEND/legend-metadata")
     Ns=[]
 
     ### just get the total summed over all channels
     if (group_type=="sum" or group_type=="all"):
-        det_types={"all":{"names":["icpc","bege","ppc","coax"],"types":["icpc","bege","ppc","coax"]}}
-        namet="all"
+        if (det_type_sel is None):
+            det_types={"all":{"names":["icpc","bege","ppc","coax"],"types":["icpc","bege","ppc","coax"]}}
+            namet="all"
+        else:
+            det_types={"all":{"names":[det_type_sel],"types":[det_type_sel]}}
+            namet="all"
     elif (group_type=="types"):
-        det_types={"icpc": {"names":["icpc"],"types":["icpc"]},
-               "bege": {"names":["bege"],"types":["bege"]},
-               "ppc": {"names":["ppc"],"types":["ppc"]},
-               "coax": {"names":["coax"],"types":["coax"]}
-            }
-        namet="by_type"
+        if (det_type_sel is None):
+
+            det_types={"icpc": {"names":["icpc"],"types":["icpc"]},
+                "bege": {"names":["bege"],"types":["bege"]},
+                "ppc": {"names":["ppc"],"types":["ppc"]},
+                "coax": {"names":["coax"],"types":["coax"]}
+                }
+            namet="by_type"
+        else:
+            det_types={det_type_sel: {"names":[det_type_sel],"types":[det_type_sel]}
+                }
+            namet="by_type"
+        
     elif (group_type=="string"):
         string_channels,string_types = get_channels_map()
         det_types={}
@@ -646,7 +682,7 @@ def get_det_types(group_type:str,string_sel:int=None,det_type_sel:str=None,level
     ### --------------
     for group in det_types:
         list_of_names= det_types[group]["names"]
-        exposure = get_exposure(list_of_names)
+        exposure = get_exposure(list_of_names,psd_usable=psd_usable)
 
         det_types[group]["exposure"]=exposure
 
