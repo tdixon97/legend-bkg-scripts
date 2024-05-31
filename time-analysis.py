@@ -2,9 +2,11 @@
 time-analysis.py
 Authors: Toby Dixon and Sofia Calgaro
 """
+import legendstyles
 
 import argparse
 import copy
+import json
 import logging
 from datetime import datetime
 
@@ -14,13 +16,11 @@ import pandas as pd
 import tol_colors as tc
 import uproot
 from hist import Hist
-from legend_plot_style import LEGENDPlotStyle as lps
 from legendmeta import LegendMetadata
 from matplotlib.backends.backend_pdf import PdfPages
 
 import utils
 
-lps.use("legend")
 vset = tc.tol_cset("vibrant")
 mset = tc.tol_cset("muted")
 plt.rc("axes", prop_cycle=plt.cycler("color", list(vset)))
@@ -47,6 +47,7 @@ style = {
 }
 
 
+plt.style.use(legendstyles.LEGEND)
 # looad the arguments
 parser = argparse.ArgumentParser(
     description="Script to plot the time dependence of counting rates in L200"
@@ -63,10 +64,10 @@ parser.add_argument(
     "-i",
     type=str,
     help="Name of input root file",
-    default="outputs/l200a-vancouver_full-dataset-v0.0.0.root",
+    default="/data1/users/tdixon/legend-bkg-scripts/outputs/l200a_neutrino24_v2.1.0.root",
 )
 parser.add_argument(
-    "--input_p10", "-I", type=str, help="Name of input root file for p10", default=None
+    "--input_p10", "-I", type=str, help="Name of input root file for p10", default="/data1/users/tdixon/legend-bkg-scripts/outputs/l200a_neutrino24_p10_v2.1.0.root"
 )
 parser.add_argument(
     "--energy",
@@ -107,7 +108,7 @@ args = parser.parse_args()
 output = args.output
 input = args.input
 input_p10 = args.input_p10
-subtract = args.subtract
+subtract = bool(args.subtract)
 plot_hist = bool(args.plot_hist)
 spectrum = args.spectrum
 overlay = args.BAT_overlay
@@ -115,13 +116,13 @@ average = args.average
 include_p10 = True
 
 logger.info(f"RUnning the analysis with {input} to {output}")
-
+  
 if input_p10 is None:
     include_p10 = False
 
 energy = args.energy
 logger.info(f"energy range and spectrum {energy} {spectrum}")
-logger.info(f"Including p10 ? {include_p10}")
+logger.info(f"Including p10? {include_p10}")
 
 energy_list = []
 # just two numbers
@@ -148,14 +149,14 @@ if len(energy_list) > 1 and subtract:
 # ----------------------
 
 
-metadb = LegendMetadata("../LEGEND/legend-metadata/")
+metadb = LegendMetadata("/data2/public/prodenv/prod-blind/ref-v2.1.0/inputs")
 
 chmap = metadb.channelmap(datetime.now())
 runs = metadb.dataprod.config.analysis_runs
 
 # hardcoded for now
 if include_p10:
-    runs["p10"] = ["r000", "r001", "r003", "r004", "r005", "r006"]
+    runs["p10"] = ["r000", "r001","r003","r004","r005","r006"]
 
 run_times = utils.get_run_times(metadb, runs, verbose=1)
 
@@ -173,7 +174,7 @@ hist_tot_p10 = None
 # extract the data and start / stop times
 # ----------------------------------------
 
-periods = ["p03", "p04", "p06", "p07", "p08", "p09"]
+periods = ["p03", "p04", "p06", "p07", "p08","p09"]
 if include_p10:
     periods.append("p10")
 
@@ -236,7 +237,7 @@ counts_p10 = {}
 
 
 if subtract:
-    pdf = PdfPages("plots/" + out_name[0:-5] + "_counting_analysis.pdf")
+    pdf = PdfPages("plots/" + out_name[0:-5] + "_counting_analysis.png")
 
 
 # get the counts in each period
@@ -290,7 +291,7 @@ for period in periods:
                         f" {energy_low} to {energy_high} keV {period}-{run}",
                     )
 
-logger.info(".....got count rates")
+logger.info(".....got count rates");
 # and for the total
 if subtract is False:
     c_tmp = utils.integrate_hist(hist_tot, energy_list)
@@ -320,7 +321,7 @@ else:
         energy_high,
         energy_high + 15,
         pdf,
-        f" {energy_low} to {energy_high} keV p3-p8-TOTAL",
+        f" {energy_low} to {energy_high} keV neutrino-TOTAL",
     )
 
 
@@ -350,10 +351,10 @@ if include_p10:
 total_exposure = 0
 total_exposure_p10 = 0
 
-period_times = {}
+period_times={}
 for period in periods:
     run_list = runs[period]
-    period_times[period] = [np.inf, 0]
+    period_times[period]=[np.inf,0]
     for run in run_list:
         if run not in run_times[period]:
             continue
@@ -373,11 +374,11 @@ for period in periods:
                 ey_low.append(counts[period][run][1] / (norm * mass))
                 ey_high.append(counts[period][run][2] / (norm * mass))
 
-                if tstop / 60 / 60 / 24 > period_times[period][1]:
-                    period_times[period][1] = tstop / 60 / 60 / 24
-                if tstart / 60 / 60 / 24 < period_times[period][0]:
-                    period_times[period][0] = tstart / 60 / 60 / 24
-
+                if (tstop/60/60/24 > period_times[period][1]):
+                    period_times[period][1]=tstop/60/60/24
+                if (tstart/60/60/24 < period_times[period][0]):
+                    period_times[period][0]=tstart/60/60/24
+                    
             total_exposure += (tstop / 60 / 60 / 24 - tstart / 60 / 60 / 24) * mass
 
         # same for p10
@@ -394,6 +395,11 @@ for period in periods:
                 y_p10.append(counts_p10[period][run][0] / (norm * mass))
                 ey_low_p10.append(counts_p10[period][run][1] / (norm * mass))
                 ey_high_p10.append(counts_p10[period][run][2] / (norm * mass))
+
+                if (tstop/60/60/24 > period_times[period][1]):
+                    period_times[period][1]=tstop/60/60/24
+                if (tstart/60/60/24 < period_times[period][0]):
+                    period_times[period][0]=tstart/60/60/24
 
 # save the time-histo (for fitting)
 with uproot.recreate("time_outputs/" + out_name) as output_file:
@@ -449,7 +455,7 @@ if include_p10:
 # --------------------------------------------------------
 logger.info(".... make plots")
 
-fig, axes_full = lps.subplots(1, 1, figsize=(4, 3), sharex=True)
+fig, axes_full = plt.subplots(1, 1, figsize=(4, 3), sharex=True)
 
 # set y axis limits
 
@@ -481,7 +487,7 @@ else:
             y=y,
             yerr=[np.abs(ey_low), np.abs(ey_high)],
             color=vset.red,
-            fmt="o",
+            fmt="o", markersize=1.5, linewidth=0.6, capsize=1,
             ecolor=vset.orange,
             label="With OB",
         )
@@ -490,29 +496,30 @@ else:
             y=y_p10,
             yerr=[np.abs(ey_low_p10), np.abs(ey_high_p10)],
             color=vset.blue,
-            fmt="o",
+            fmt="o", markersize=1.5, linewidth=0.6, capsize=1,
             ecolor="grey",
             label="No OB",
         )
     else:
-        axes_full.errorbar(
+         axes_full.errorbar(
             x=x,
-            y=y,
+	    y=y,
             yerr=[np.abs(ey_low), np.abs(ey_high)],
-            color=vset.blue,
-            fmt="o",
+	    color=vset.blue,
+            fmt="o", markersize=1.5, linewidth=0.6, capsize=1,
             ecolor="grey",
         )
 
 for p in period_times:
-    axes_full.axvspan(
-        xmin=period_times[p][0], xmax=period_times[p][1], color="grey", alpha=0.2
-    )
-
+    if p=="p10":
+        axes_full.axvspan(xmin=period_times[p][0],xmax=period_times[p][1],color=vset.blue,alpha=0.1)
+    else:
+        axes_full.axvspan(xmin=period_times[p][0],xmax=period_times[p][1],color=vset.orange,alpha=0.1)
+   
 axes_full.set_xlabel("Time [days]")
 axes_full.set_ylabel("Counts / kg -day")
 if include_p10:
-    axes_full.legend(loc="best")
+    axes_full.legend(loc="upper left", frameon=True)
 axes_full.set_title(f"{e_str} keV")
 
 
@@ -567,9 +574,11 @@ if overlay is not None:
     N = expo(t, df_res["glob_mode"][0], df_res["glob_mode"][1], df_res["glob_mode"][2])
 
     plt.plot(t, N, label="Global mode")
-    plt.legend(loc="best")
+    plt.legend(loc="upper left", frameon=True)
 
-plt.savefig("plots/" + out_name[0:-5] + ".pdf")
+legendstyles.legend_watermark(axes_full, logo_suffix="-200", location="outer left")
+legendstyles.add_preliminary(axes_full, color="red")
+plt.savefig("plots/" + out_name[0:-5] + ".png")
 
 
 # make some posterior plots / extract some numbers
@@ -597,34 +606,32 @@ histo.fill(rates)
 if include_p10:
     histo_p10.fill(rates_p10)
     histo_div.fill(div)
-
-fig, axes_full = lps.subplots(1, 1, figsize=(4, 3), sharex=True)
+    
+fig, axes_full = plt.subplots(1, 1, figsize=(4, 3), sharex=True)
 
 histo.plot(
-    ax=axes_full, **style, histtype="fill", alpha=0.4, color=vset.blue, label="With OB"
+    ax=axes_full, **style, histtype="fill", alpha=0.4, color=vset.orange, label="With OB"
 )
 if include_p10:
     histo_p10.plot(
-        ax=axes_full,
-        **style,
-        histtype="fill",
-        alpha=0.4,
-        color=vset.orange,
-        label="No OB",
+        ax=axes_full, **style, histtype="fill", alpha=0.4, color=vset.blue, label="No OB"
     )
 
 axes_full.set_xlabel("counts/kg/day")
 axes_full.set_ylabel("Prob [arb]")
-axes_full.legend(loc="best")
+axes_full.legend(loc="upper left", frameon=True)
 axes_full.set_title(f"{e_str} keV")
-
-plt.savefig("plots/" + out_name[0:-5] + "_posterior.pdf")
+legendstyles.legend_watermark(axes_full, logo_suffix="-200", location="outer left")
+legendstyles.add_preliminary(axes_full, color="red")
+plt.savefig("plots/" + out_name[0:-5] + "_posterior.png")
 
 if include_p10:
-    fig, axes_full = lps.subplots(1, 1, figsize=(4, 3), sharex=True)
+    fig, axes_full = plt.subplots(1, 1, figsize=(4, 3), sharex=True)
     histo_div.plot(ax=axes_full, **style, color=vset.blue, histtype="fill", alpha=0.4)
-    axes_full.set_xlabel("rate (p10)/rate (p3-p8)")
-    plt.savefig("plots/" + out_name[0:-5] + "_ratio_posterior.pdf")
+    axes_full.set_xlabel("rate (p10)/rate (neutrino)")
+    legendstyles.legend_watermark(axes_full, logo_suffix="-200", location="outer left")
+    legendstyles.add_preliminary(axes_full, color="red")
+    plt.savefig("plots/" + out_name[0:-5] + "_ratio_posterior.png")
 
 # now the summary stats
 w, x = histo.to_numpy()

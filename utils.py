@@ -1,3 +1,4 @@
+import legendstyles
 import copy
 from datetime import datetime
 
@@ -10,6 +11,9 @@ from scipy.stats import poisson
 from datetime import datetime, timezone
 
 import json
+
+
+plt.style.use(legendstyles.LEGEND)
 
 def number2name(meta:LegendMetadata,number:str)->str:
     """Get the channel name given the channel number.                                                                                                                                                      
@@ -327,7 +331,7 @@ def sideband_counting(hist, low, center_low, center_high, high, pdf=None, name="
             histo_x[i] = w_x[i]
             histo_y[i] = w_y[i]
 
-        fig, axes = lps.subplots(
+        fig, axes = plt.subplots(
             1, 1, figsize=(3, 3), sharex=True, gridspec_kw={"hspace": 0}
         )
         axes.set_xlabel("Counts")
@@ -365,7 +369,7 @@ def sideband_counting(hist, low, center_low, center_high, high, pdf=None, name="
             if xt > low and xt < high and hist[i] > maxi:
                 maxi = hist[i]
 
-        fig, axes = lps.subplots(
+        fig, axes = plt.subplots(
             1, 1, figsize=(3, 3), sharex=True, gridspec_kw={"hspace": 0}
         )
         hist.plot(ax=axes, **style, histtype="fill", alpha=0.5, label="Data")
