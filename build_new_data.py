@@ -6,8 +6,12 @@ Main Authors: Sofia Calgaro, Toby Dixon, Luigi Pertoldi based on a script from W
 import argparse
 import glob
 import json
+import copy
+import sys
+
 import logging
 from pathlib import Path
+import matplotlib.pyplot as plt
 
 import awkward as ak
 import numpy as np
@@ -105,6 +109,64 @@ def get_m2_categories(channel_array, channel2string, channel2position):
     return np.array(category)
 
 
+def make_unphysical_rate_plot(run,period,unphysical,geds_mapping,chmax=30,is_forced=False,norm=None,time=None):
+
+    # get total number of events
+    n=0
+    chans=[]
+    events=[]
+    counter=0
+    unphysical=dict(unphysical)
+    n_chans= len(list(geds_mapping.keys()))
+    for key, item in sorted(unphysical.items(), key=lambda item: item[1], reverse=True):        
+        n+=item
+        if (geds_mapping[f"ch{key}"]=="V07646A"):
+            continue
+        if (counter<chmax):
+            chans.append(geds_mapping[f"ch{key}"])
+            if (norm is not None):
+                events.append(100*item/norm)
+            elif (time is not None):
+                events.append(100*item/time)
+            else:
+                events.append(item)
+        counter+=1
+
+    logger.info(f"In total we have {n} unphysical events")
+    fig,ax=plt.subplots(figsize=(8,4))
+    ax.bar(chans,events)
+    if (norm is not None):
+        ax.set_ylabel("Fraction of unphysical hits [%]")
+    elif (time is not None):
+        ax.set_ylabel("Rate of unphysical hits [mHz]")
+    else:
+        ax.set_ylabel("Number of unphysical events")
+
+    plt.xticks(rotation=90, fontsize=8) 
+    if (norm is None and time is None):
+        plt.axhline(y=n/n_chans,label="Average",linestyle="--",color="red")
+    plt.legend()
+    if (norm is not None):
+        plt.title(f"Fraction of unphysical hits for {period} - {run}")
+    elif (time is not None):
+        plt.title(f"Rate of unphysical hits for {period} - {run}")
+
+    else:
+        plt.title(f"Number of unphysical hits for {period} - {run}")
+
+    plt.tight_layout()
+    if (is_forced and norm is None):
+
+        plt.savefig(f"plots/unphysical_forced_trigger_{period}_{run}.pdf")
+    elif (norm is not None):
+        plt.savefig(f"plots/unphysical_forced_trigger_norm_{period}_{run}.pdf")
+    elif (time is not None):
+        plt.savefig(f"plots/unphysical_rate_{period}_{run}.pdf")
+
+    else:
+        plt.savefig(f"plots/unphysical_{period}_{run}.pdf")
+
+
 def get_data_awkard(
     cfg: dict,
     period=None,
@@ -135,11 +197,15 @@ def get_data_awkard(
 
     logger.debug(evt_path + "/" + tier + f"/phy/{period}/{run}/")
 
-    fl_evt = glob.glob(
-        evt_path + "/" + tier + f"/phy/l200-{period}-{run}-phy-tier_pet.lh5"
-    )
+    if (os.path.exists(evt_path + "/" + tier + f"/phy/l200-{period}-{run}-phy-tier_pet.lh5")):
+        fl_evt = glob.glob(evt_path + "/" + tier + f"/phy/l200-{period}-{run}-phy-tier_pet.lh5")
+    else:
+        fl_evt = glob.glob(evt_path + "/" + tier + f"/phy/{period}/{run}/*")
 
-    for f_evt in fl_evt:
+
+    for idx,f_evt in enumerate(fl_evt):
+        if (idx%50==0):
+            logger.debug(f"Reading >>> {f_evt} ({idx} out of {len(fl_evt)})")
 
         d_evt = lh5.read_as("evt", f_evt, library="ak")
         d_evt["period"] = period
@@ -158,50 +224,72 @@ def main():
         "--output", help="Name of output root file, eg l200a-p10-r000-dataset-tmp-auto"
     )
     parser.add_argument("--p", help="List of periods to inspect")
+    parser.add_argument("--r", help="List of runs to inspect",default=None)
 
+
+    parser.add_argument("--c", help="Cycle to use")
+    parser.add_argument(
+        "--use_qc",
+        default=1,
+        help="Set to 0 if you want to not use QCs",
+    )
     args = parser.parse_args()
+    cycle= args.c
+    run_list=args.r.split(",")
+    print(run_list)
+    use_qc =bool(int(args.use_qc))
+    logger.info(f"use qc {use_qc}")
     config_path = "cfg/build-pdf-config.json"
-    prod_cycle = "/data2/public/prodenv/prod-blind/ref-v1.1.0/"
-    meta_path = "/data2/public/prodenv/prod-blind/ref-v1.1.0/inputs/"
+    prod_cycle = f"/data2/public/prodenv/prod-blind/{cycle}/"
+    meta_path  = f"/data2/public/prodenv/prod-blind/{cycle}/inputs/"
+    tier="pet"
+
     paths_cfg = {
         "p03": {
-            "tier": "pet",
+            "tier": tier,
             "evt_path": f"{prod_cycle}/generated/tier/",
         },
         "p04": {
-            "tier": "pet",
+            "tier": tier,
             "evt_path": f"{prod_cycle}/generated/tier/",
         },
         "p06": {
-            "tier": "pet",
+            "tier": tier,
             "evt_path": f"{prod_cycle}/generated/tier/",
         },
         "p07": {
-            "tier": "pet",
+            "tier": tier,
             "evt_path": f"{prod_cycle}/generated/tier/",
         },
         "p08": {
-            "tier": "pet",
+            "tier": tier,
             "evt_path": f"{prod_cycle}/generated/tier/",
         },
         "p09": {
-            "tier": "pet",
+            "tier": tier,
             "evt_path": f"{prod_cycle}/generated/tier/",
         },
         "p10": {
-            "tier": "pet",
+            "tier": tier,
+            "evt_path": f"{prod_cycle}/generated/tier/",
+
+        },
+        "p11": {
+            "tier": tier,
             "evt_path": f"{prod_cycle}/generated/tier/",
         },
     }
     out_name = f"{args.output}"
     periods = args.p
+    if (isinstance(periods,str)):
+        periods=[periods]
 
     with Path(config_path).open() as f:
         rconfig = json.load(f)
     # get the metadata information / mapping
     # --------------------------------------
     logger.info("... get the metadata information / mapping")
-    metadb = LegendMetadata()
+    metadb = LegendMetadata(f"/data2/public/prodenv/prod-blind/{cycle}/inputs/")
     chmap = metadb.channelmap(rconfig["timestamp"])
 
     geds_mapping = {
@@ -219,13 +307,26 @@ def main():
         for _name, _dict in chmap.items()
         if chmap[_name]["system"] == "geds"
     }
+    geds_types = {
+        f"ch{_dict['daq']['rawid']}": _dict["type"]
+        for _name, _dict in chmap.items()
+        if chmap[_name]["system"] == "geds"
+    }
     channel2string = get_vectorised_converter(geds_strings)
     channel2position = get_vectorised_converter(geds_positions)
+    channel2type = get_vectorised_converter(geds_types)
 
     # analysis runs
-    runs = metadb.dataprod.runinfo
-    logger.info("... create the histos to fill (full period)")
+    runs_old = metadb.dataprod.runinfo
+    runs=copy.deepcopy(runs_old)
+    if (run_list is not None):
+        for period in periods:
+            for run in runs_old[period]:
+                if (run not in run_list):
+                    runs[period].pop(run)
 
+    logger.info("... create the histos to fill (full period)")
+    run_hist_list=["","_icpc","_bege","_ppc","_coax"]
     hists = {}
     for _cut_name in rconfig["cuts"]:
         if not rconfig["cuts"][_cut_name]["is_sum"]:
@@ -247,21 +348,25 @@ def main():
         if not rconfig["cuts"][_cut_name]["is_sum"]:
             run_hists[_cut_name] = {}
             for _period, _run_list in runs.items():
-
+                if (_period not in periods):
+                    continue
                 for run in _run_list:
-                    hist_name = f"{_cut_name}_{_period}_{run}"
-                    hist_title = f"{_period} {run} energy deposits"
-                    nbins = rconfig["hist"]["nbins"]
-                    emin = rconfig["hist"]["emin"]
-                    emax = rconfig["hist"]["emax"]
-                    run_hists[_cut_name][f"{_period}_{run}"] = ROOT.TH1F(
-                        hist_name, hist_title, nbins, emin, emax
-                    )
+                    for name in run_hist_list:
+                        hist_name = f"{_cut_name}_{_period}_{run}{name}"
+                        hist_title = f"{_period} {run} energy deposits"
+                        nbins = rconfig["hist"]["nbins"]
+                        emin = rconfig["hist"]["emin"]
+                        emax = rconfig["hist"]["emax"]
+                        run_hists[_cut_name][f"{_period}_{run}{name}"] = ROOT.TH1F(
+                            hist_name, hist_title, nbins, emin, emax
+                        )
+
 
     sum_hists = {}
     string_diff = np.arange(7)
     names_m2 = [f"sd_{item1}" for item1 in string_diff]
     names_m2.extend(["all", "cat_1", "cat_2", "cat_3"])
+    names_m2.extend(["e1_icpc", "e1_bege", "e1_ppc", "e1_coax"])
 
     # now the summed histos
     for _cut_name in rconfig["cuts"]:
@@ -328,8 +433,16 @@ def main():
             if "phy" not in runs[period][run]:
                 continue
 
-            data = get_data_awkard(cfg=paths_cfg, period=period, run=run, metadb=metadb)
-            if data is None:
+            if (period == "p10" and run =="r002"):
+                continue
+            data = get_data_awkard(
+                cfg=paths_cfg,
+                period=period,
+                run =run,
+                metadb = metadb
+            )
+            if (data is None):
+
                 continue
 
             data["geds", "on_multiplicity"] = ak.sum(
@@ -338,13 +451,39 @@ def main():
 
             # and the usual cuts
             data = data[
-                (~data.trigger.is_forced)  # no forced triggers
-                & (~data.coincident.puls)  # no pulser eventsdata
-                & (~data.coincident.muon)  # no muons
-                & (data.geds.multiplicity > 0)  # no purely lar triggered events
+                 (~data.coincident.puls)  # no pulser eventsdata
+                & (~data.coincident.muon_offline)  # no muons
+                & (~data.geds.quality.is_not_bb_like.is_delayed_discharge)
                 & (ak.all(data.geds["quality"][qcs_flag], axis=-1))
-                & data.geds["quality"][evt_quality_flag]
             ]
+            
+            import collections
+            # first for real triggers
+            unphysical = collections.Counter(ak.flatten(data[~data.trigger.is_forced]["geds"]["quality"]["is_not_bb_like"]["rawid"]))
+            make_unphysical_rate_plot(args.r,args.p,unphysical,geds_mapping,is_forced=False,time=runs[period][run]["phy"]["livetime_in_s"])
+            
+
+
+
+            unphysical = collections.Counter(ak.flatten(data[data.trigger.is_forced]["geds"]["quality"]["is_not_bb_like"]["rawid"]))
+            n_forced = ak.num(data[data.trigger.is_forced],axis=0)
+            n_forced_pass =  ak.num(data[(data.geds.quality[evt_quality_flag]) & (data.trigger.is_forced)],axis=0)
+            logger.info(f"n forced {n_forced} and n forced pass {n_forced_pass}")
+            p = n_forced_pass/n_forced
+            err = np.sqrt(p*(1-p)/n_forced)
+            logger.info(f"Forced trigger survival = {100*n_forced_pass/n_forced} +/- {100*err}")
+
+            
+            make_unphysical_rate_plot(args.r,args.p,unphysical,geds_mapping,is_forced=True,norm=n_forced)
+
+            # remove forced triggers
+            data=data[(~data.trigger.is_forced) & (data.geds.multiplicity > 0)]
+
+
+            if (use_qc):
+                data = data[(data.geds["quality"][evt_quality_flag])]
+            data["pass_psd"]=ak.all(data.geds.psd.is_bb_like, axis=-1)
+
 
             for _cut_name, _cut_dict in rconfig["cuts"].items():
                 _cut_string = _cut_dict["cut_string"]
@@ -382,29 +521,25 @@ def main():
                             np.ones(len(_energy_array)),
                         )
 
-                    # fill also time dependent hists
 
-                    for run in _run_list:
-                        _energy_array = (
-                            ak.flatten(
-                                data[
-                                    eval(_cut_string, globs, data)
-                                    & (data["period"] == period)
-                                    & (data["run"] == run)
-                                ]["geds"][energy_name],
-                                axis=-1,
-                            )
-                            .to_numpy()
-                            .astype(np.float64)
-                        )
 
-                        if len(_energy_array) == 0:
-                            continue
-                        run_hists[_cut_name][f"{period}_{run}"].FillN(
-                            len(_energy_array),
-                            _energy_array,
-                            np.ones(len(_energy_array)),
-                        )
+                        # fill also time dependent hists
+                        for name_run_hist in run_hist_list:
+
+                            if (name_run_hist==""):
+                                run_hists[_cut_name][f"{period}_{run}"].FillN(
+                                    len(_energy_array),
+                                    _energy_array,
+                                    np.ones(len(_energy_array)),
+                                )
+                            else:
+                                if (chmap[geds_mapping[_channel_id]]["type"] in name_run_hist):
+                                    run_hists[_cut_name][f"{period}_{run}{name_run_hist}"].FillN(
+                                        len(_energy_array),
+                                        _energy_array,
+                                        np.ones(len(_energy_array)),
+                                    )
+
 
                 elif "is_2d" not in _cut_dict or _cut_dict["is_2d"] is False:
 
@@ -426,15 +561,15 @@ def main():
                         np.ones(len(_summed_energy_array)),
                     )
 
-                # cross talk correct
                 else:
-                    # this is likely to be pretty slow, we can try to make something faster but id need to think about it
                     _mult_energy_array = data[
                         eval(_cut_string, globs, data) & (data["period"] == period)
                     ]["geds"][energy_name]
                     _mult_channel_array = data[
                         eval(_cut_string, globs, data) & (data["period"] == period)
-                    ]["geds"][rawid_name].to_numpy()
+                    ]["geds"][rawid_name][ak.argsort(_mult_energy_array, axis=-1)].to_numpy()
+
+                    
                     # apply the category selection
 
                     _corrected_energy_1 = (
@@ -457,7 +592,7 @@ def main():
                     for name in names_m2:
 
                         # select the right events
-                        if name != "all":
+                        if name != "all" and "e1" not in name:
                             categories = get_m2_categories(
                                 _mult_channel_array, channel2string, channel2position
                             )
@@ -492,6 +627,16 @@ def main():
                                 )[ids]
 
                         # all case
+                        elif "e1" in name:
+                            e1_rawid = _mult_channel_array[:, 1]
+                            types = channel2type(e1_rawid)
+                       
+                            ids = np.where(types == name.split("_")[1])
+                            _corrected_energy_1_tmp = np.array(_corrected_energy_1)[ids]
+                            _corrected_energy_2_tmp = np.array(_corrected_energy_2)[ids]
+                            _summed_energy_array_tmp = np.array(_summed_energy_array)[
+                                    ids
+                                ]
                         else:
                             _corrected_energy_1_tmp = np.array(_corrected_energy_1)
                             _corrected_energy_2_tmp = np.array(_corrected_energy_2)
@@ -503,19 +648,15 @@ def main():
                         _corrected_energy_1_tmp = np.array(_corrected_energy_1_tmp)
                         _corrected_energy_2_tmp = np.array(_corrected_energy_2_tmp)
 
-                        if "is_2d" in _cut_dict:
-                            sum_hists[_cut_name][name].FillN(
-                                len(_corrected_energy_1_tmp),
-                                _corrected_energy_1_tmp,
-                                _corrected_energy_2_tmp,
-                                np.ones(len(_summed_energy_array_tmp)),
-                            )
-                        else:
-                            sum_hists[_cut_name][name].FillN(
-                                len(_summed_energy_array_tmp),
-                                _summed_energy_array_tmp,
-                                np.ones(len(_summed_energy_array_tmp)),
-                            )
+                    
+                        sum_hists[_cut_name][name].FillN(
+                            len(_corrected_energy_1_tmp),
+                            _corrected_energy_1_tmp,
+                            _corrected_energy_2_tmp,
+                            np.ones(len(_summed_energy_array_tmp)),
+                        )
+                        
+
 
     for _cut_name in hists:
         hists[_cut_name]["all"] = ROOT.TH1F(

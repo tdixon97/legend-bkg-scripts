@@ -1,55 +1,71 @@
 {
-  "energy_threshold": 0.025,
-  "timestamp": "20230323T000000Z",
-  "hist": {
-    "nbins": 6000,
-    "bin_width": 1,
-    "emin": 0,
-    "emax": 6000
-  },
-  "cuts": {
-    "raw": {
-      "cut_string": "True",
-      "description": "",
-      "is_sum": false
-    },
-    "mul_surv": {
-      "cut_string": "(mul == 1) ",
-      "description": "",
-      "is_sum": false
-    },
-    "mul_fail": {
-      "cut_string": "(mul > 1)",
-      "description": "",
-      "is_sum": false
-    },
-    "mul2_surv": {
-      "cut_string": "(mul == 2) and (mul_is_good == 2)",
-      "description": "",
-      "is_sum": true,
-      "is_2d": false
-    },
-    "mul2_surv_2d": {
-      "cut_string": "(mul == 2) and (mul_is_good == 2)",
-      "description": "",
-      "is_sum": true,
-      "is_2d": true
-    },
-    "mul3_surv": {
-      "cut_string": "(mul == 3) and (mul_is_good == 3)",
-      "description": "",
-      "is_sum": true,
-      "is_2d": false
-    },
-    "lar_surv": {
-      "cut_string": "(mul == 1) and (coincident.spms == False)",
-      "description": "",
-      "is_sum": false
-    },
-    "lar_fail": {
-      "cut_string": "(mul == 1) and (coincident.spms == True)",
-      "description": "",
-      "is_sum": false
-    }
-  }
+	"energy_threshold": 0.025,
+	"timestamp": "20230323T000000Z",
+	"hist": {
+		"nbins": 6000,
+		"bin_width": 1,
+		"emin": 0,
+		"emax": 6000
+	},
+	"cuts": {
+		"hit": {
+			"cut_string": "(mul > 0 )",
+			"description": "",
+			"is_sum": false
+		},
+		"raw": {
+			"cut_string": "(mul > 0)",
+			"description": "",
+			"is_sum": true
+		},
+		"mul_surv": {
+			"cut_string": "(mul == 1) ",
+			"description": "",
+			"is_sum": false
+		},
+		"mul_fail": {
+			"cut_string": "(mul > 1)",
+			"description": "",
+			"is_sum": false
+		},
+		"mul2_surv": {
+			"cut_string": "(mul == 2) and (mul_is_good == 2)",
+			"description": "",
+			"is_sum": true,
+			"is_2d":false
+		},
+        "mul2_surv_2d": {
+			"cut_string": "(mul == 2) and (mul_is_good == 2)",
+			"description": "",
+			"is_sum": true,
+			"is_2d":true
+		},
+		"mul3_surv": {
+			"cut_string": "(mul == 3) and (mul_is_good == 3)",
+			"description": "",
+			"is_sum": true,
+			"is_2d":false
+		},
+		"lar_surv":{
+			"cut_string": "(mul == 1) and (coincident.spms == False)",
+			"description": "",
+			"is_sum": false
+		},
+		"lar_fail":{
+			"cut_string": "(mul == 1) and (coincident.spms == True)",
+			"description": "",
+			"is_sum": false
+		},
+		"psd_surv":{
+			"cut_string": "(mul == 1) and (coincident.spms == False) and pass_psd",
+			"description": "",
+			"is_sum": false
+		},
+		"psd_fail":{
+			"cut_string": "(mul == 1) and (coincident.spms == False) and ~pass_psd",
+			"description": "",
+			"is_sum": false
+		}
+	}
+
 }
