@@ -2,26 +2,17 @@
 Script to load the calibration data for comparison with MC
 Main Authors: Sofia Calgaro, Toby Dixon
 """
-import json
-import argparse
-import glob
+
 import json
 import logging
-import pandas as pd
 import os
 from datetime import datetime
-from pathlib import Path
 
 import awkward as ak
 import numpy as np
-import ROOT
-import uproot
+import pandas as pd
 from legendmeta import LegendMetadata
 from lgdo import lh5
-from lgdo.lh5 import show
-from tqdm import tqdm
-import os
-from datetime import datetime
 
 # -----------------------------------------------------------
 # LOGGER SETTINGS
@@ -32,7 +23,8 @@ stream_handler.setLevel(logging.INFO)
 logger.addHandler(stream_handler)
 # -----------------------------------------------------------
 
-sto=lh5.LH5Store()
+sto = lh5.LH5Store()
+
 
 def get_data_awkard(
     cfg: dict,
@@ -40,7 +32,7 @@ def get_data_awkard(
     metadb=LegendMetadata(),
     threshold=500,
     period="p03",
-    run="r000"
+    run="r000",
 ):
     """
     A function to load the evt tier data into an awkard array also getting the energies
@@ -61,25 +53,23 @@ def get_data_awkard(
     """
 
     data = None
-    for idx,f_evt in enumerate(file_list_evt):
+    for idx, f_evt in enumerate(file_list_evt):
 
         logger.info(f"{idx} out of {len(file_list_evt)}")
         tier = "pet"
-        f_tcm = f_evt.replace(tier, "tcm").replace("v1.0.1","v1.0.0")
-        f_hit = f_evt.replace(tier,"pht")
+        f_tcm = f_evt.replace(tier, "tcm").replace("v1.0.1", "v1.0.0")
+        f_hit = f_evt.replace(tier, "pht")
         d_evt = lh5.read_as("evt", f_evt, library="ak")
         logger.debug("read evt tier file")
-        d_evt["geds", "is_is_unphysical_idx"] = d_evt[
-                "geds", "is_unphysical_idx"
-            ]
-            
+        d_evt["geds", "is_is_unphysical_idx"] = d_evt["geds", "is_unphysical_idx"]
+
         # some black magic to get TCM data corresponding to geds.hit_idx
         tcm = ak.Array(
             {
                 k: ak.unflatten(
-                    lh5.read_as(
-                        f"hardware_tcm_1/array_{k}", f_tcm, library="ak"
-                    )[ak.flatten(d_evt.geds.hit_idx_all)],
+                    lh5.read_as(f"hardware_tcm_1/array_{k}", f_tcm, library="ak")[
+                        ak.flatten(d_evt.geds.hit_idx_all)
+                    ],
                     ak.num(d_evt.geds.hit_idx_all),
                 )
                 for k in ["id", "idx"]
@@ -88,9 +78,9 @@ def get_data_awkard(
         tcm_unphysical = ak.Array(
             {
                 k: ak.unflatten(
-                    lh5.read_as(
-                        f"hardware_tcm_1/array_{k}", f_tcm, library="ak"
-                    )[ak.flatten(d_evt.geds.is_unphysical_idx)],
+                    lh5.read_as(f"hardware_tcm_1/array_{k}", f_tcm, library="ak")[
+                        ak.flatten(d_evt.geds.is_unphysical_idx)
+                    ],
                     ak.num(d_evt.geds.is_unphysical_idx),
                 )
                 for k in ["id", "idx"]
@@ -137,11 +127,7 @@ def get_data_awkard(
         d_evt["geds", "hit_rawid"] = rawid_sort
         d_evt["geds", "energy"] = energy
 
-        
-        ch = metadb.channelmap(
-                metadb.dataprod.runinfo[period][run]["phy"]["start_key"]
-            )
-    
+        ch = metadb.channelmap(metadb.dataprod.runinfo[period][run]["phy"]["start_key"])
 
         ac = [
             _dict["daq"]["rawid"]
@@ -158,17 +144,17 @@ def get_data_awkard(
 
         d_evt["geds", "is_good_channel"] = d_evt["geds", "hit_rawid"] > 0
         for a in ac:
-            d_evt["geds", "is_good_channel"] = d_evt[
-                "geds", "is_good_channel"
-            ] & (d_evt["geds", "hit_rawid"] != a)
+            d_evt["geds", "is_good_channel"] = d_evt["geds", "is_good_channel"] & (
+                d_evt["geds", "hit_rawid"] != a
+            )
         for a in off:
-            d_evt["geds", "is_good_channel"] = d_evt[
-                "geds", "is_good_channel"
-            ] & (d_evt["geds", "hit_rawid"] != a)
+            d_evt["geds", "is_good_channel"] = d_evt["geds", "is_good_channel"] & (
+                d_evt["geds", "hit_rawid"] != a
+            )
 
         logger.debug("start filtering")
 
-        d_evt = d_evt[ak.any(d_evt.geds.energy>threshold,axis=-1)]
+        d_evt = d_evt[ak.any(d_evt.geds.energy > threshold, axis=-1)]
         d_evt["period"] = period
         d_evt["run"] = run
 
@@ -188,8 +174,6 @@ def get_data_awkard(
     return data
 
 
-
-
 def get_vectorised_converter(mapping):
     def channel2other(channel):
         """Extract which string a given channel is in"""
@@ -198,13 +182,17 @@ def get_vectorised_converter(mapping):
 
     return np.vectorize(channel2other)
 
-def get_time_unix(time_str:str):
+
+def get_time_unix(time_str: str):
 
     dt_object = datetime.strptime(time_str, "%Y%m%dT%H%M%SZ")
 
     return dt_object.timestamp()
 
-def get_file_list(tcm_path:str,key_path:str,period:str,run:str,pos:str)->list:
+
+def get_file_list(
+    tcm_path: str, key_path: str, period: str, run: str, pos: str
+) -> list:
     """
     Gets a list of files
     Parameters
@@ -215,25 +203,25 @@ def get_file_list(tcm_path:str,key_path:str,period:str,run:str,pos:str)->list:
         path to the folder containing the metadata on cal data
     period
         period in the form pXY
-    run 
+    run
         run in the form rXYZ
     pos
         either pos1 or pos2
     """
     json_file = f"{key_path}/{period}/l200-{period}-{run}-cal-T%-keys.json"
 
-    with open(json_file, 'r') as json_file:
+    with open(json_file) as json_file:
         run_info = json.load(json_file)
-    
+
     edge_keys = run_info["info"]["source_positions"][pos]["keys"]
     tstart = get_time_unix(edge_keys[0].split("-")[-1])
     tstop = get_time_unix(edge_keys[1].split("-")[-1])
-    all_keys =sorted(os.listdir(f"{tcm_path}/{period}/{run}/"))
-    output=[]
+    all_keys = sorted(os.listdir(f"{tcm_path}/{period}/{run}/"))
+    output = []
     for key in all_keys:
 
         time = get_time_unix(key.split("-")[-2])
-        if (time>=tstart and time<=tstop):
+        if time >= tstart and time <= tstop:
             output.append(key)
     return output
 
@@ -247,29 +235,22 @@ def get_tcm_pulser_ids(tcm_file, channel, multiplicity_threshold):
     else:
         chan = channel
 
-    
     data = pd.DataFrame(
         {
-            "array_id": sto.read("hardware_tcm_1/array_id", tcm_file)[0].view_as(
-                "np"
-            ),
+            "array_id": sto.read("hardware_tcm_1/array_id", tcm_file)[0].view_as("np"),
             "array_idx": sto.read("hardware_tcm_1/array_idx", tcm_file)[0].view_as(
                 "np"
             ),
         }
     )
-    cumulength = sto.read("hardware_tcm_1/cumulative_length", tcm_file)[0].view_as(
-        "np"
-    )
+    cumulength = sto.read("hardware_tcm_1/cumulative_length", tcm_file)[0].view_as("np")
     cumulength = np.append(np.array([0]), cumulength)
     n_channels = np.diff(cumulength)
     evt_numbers = np.repeat(np.arange(0, len(cumulength) - 1), np.diff(cumulength))
     evt_mult = np.repeat(np.diff(cumulength), np.diff(cumulength))
     data["evt_number"] = evt_numbers
     data["evt_mult"] = evt_mult
-    high_mult_events = np.where(n_channels > multiplicity_threshold)[  # noqa: F841
-        0
-    ]
+    high_mult_events = np.where(n_channels > multiplicity_threshold)[0]  # noqa: F841
     ids = data.query(f"array_id=={chan} and evt_number in @high_mult_events")[
         "array_idx"
     ].to_numpy()
@@ -277,47 +258,47 @@ def get_tcm_pulser_ids(tcm_file, channel, multiplicity_threshold):
     mask[ids] = True
     return ids, mask
 
-def get_livetime(path:str,file_list:list,delta_t:float):
-    """ Get the livetime for a certain list of files """
+
+def get_livetime(path: str, file_list: list, delta_t: float):
+    """Get the livetime for a certain list of files"""
 
     sto = lh5.LH5Store()
-    time_tot=0
+    time_tot = 0
     for file in file_list:
-        ids,mask=get_tcm_pulser_ids(path+file, "ch1027201",0)
-        time = delta_t*len(ids)
-        time_tot+=time
+        ids, mask = get_tcm_pulser_ids(path + file, "ch1027201", 0)
+        time = delta_t * len(ids)
+        time_tot += time
     return time_tot
 
-def add_livetime_to_json(periods,path,cfg):
+
+def add_livetime_to_json(periods, path, cfg):
 
     for period in periods:
-        runs=os.listdir(path+period)
+        runs = os.listdir(path + period)
         for run in runs:
-            
+
             json_file_path = f"{cfg}/{period}/l200-{period}-{run}-cal-T%-keys.json"
-        
-            with open(json_file_path, 'r') as json_file:
+
+            with open(json_file_path) as json_file:
                 run_info = json.load(json_file)
             positions = run_info["info"]["source_positions"].keys()
 
             for pos in positions:
-                list_pos =get_file_list(f"{path}",cfg,period,run,pos)
-                livetime =get_livetime(f"{path}/{period}/{run}/",list_pos,2)
-                run_info["info"]["source_positions"][pos]["livetime_in_s"]=livetime
+                list_pos = get_file_list(f"{path}", cfg, period, run, pos)
+                livetime = get_livetime(f"{path}/{period}/{run}/", list_pos, 2)
+                run_info["info"]["source_positions"][pos]["livetime_in_s"] = livetime
                 logger.info(f"livetime for {period} {run} {pos} : {livetime}")
-            with open(json_file_path, 'w') as json_file:
+            with open(json_file_path, "w") as json_file:
                 json.dump(run_info, json_file, indent=3)
 
 
-
-   
 # get the metadata information / mapping
 # --------------------------------------
-periods=['p03','p04','p06','p07','p08']
+periods = ["p03", "p04", "p06", "p07", "p08"]
 prod_cycle = "/data2/public/prodenv/prod-blind/ref-v1.0.1/"
-out_name ="l200a-cal-dataset.root"
+out_name = "l200a-cal-dataset.root"
 logger.info("... get the metadata information / mapping")
-metadb = LegendMetadata(prod_cycle+"inputs/")
+metadb = LegendMetadata(prod_cycle + "inputs/")
 
 chmap = metadb.channelmap(datetime.now())
 
@@ -340,54 +321,49 @@ channel2string = get_vectorised_converter(geds_strings)
 channel2position = get_vectorised_converter(geds_positions)
 
 runs = metadb.dataprod.config.analysis_runs
-    
-compute_livetime =False
+
+compute_livetime = False
 cfg = "cfg/DataKeys/cal/"
-if (compute_livetime is True):
-    add_livetime_to_json(periods,f"{prod_cycle}/generated/tier/tcm/cal/",cfg)
+if compute_livetime is True:
+    add_livetime_to_json(periods, f"{prod_cycle}/generated/tier/tcm/cal/", cfg)
 
 
-prod_cycle_tcm=prod_cycle.replace("v1.0.1","v1.0.0")
+prod_cycle_tcm = prod_cycle.replace("v1.0.1", "v1.0.0")
 
 paths_cfg = {
-        "p03": {
-            "tier": "pet",
-            "evt_path": f"{prod_cycle}/generated/tier/",
-            "tcm_path": f"{prod_cycle_tcm}/generated/tier/",
-
-        },
-        "p04": {
-            "tier": "pet",
-            "evt_path": f"{prod_cycle}/generated/tier/",
-            "tcm_path": f"{prod_cycle_tcm}/generated/tier/",
-
-        },
-        "p06": {
-            "tier": "pet",
-            "evt_path": f"{prod_cycle}/generated/tier/",
-            "tcm_path": f"{prod_cycle_tcm}/generated/tier/",
-
-        },
-        "p07": {
-            "tier": "pet",
-            "evt_path": f"{prod_cycle}/generated/tier/",
-            "tcm_path": f"{prod_cycle_tcm}/generated/tier/",
-
-        },
-        "p08": {
-            "tier": "pet",
-            "evt_path": f"{prod_cycle}/generated/tier/",
-            "tcm_path": f"{prod_cycle_tcm}/generated/tier/",
-
-        }
-    }
+    "p03": {
+        "tier": "pet",
+        "evt_path": f"{prod_cycle}/generated/tier/",
+        "tcm_path": f"{prod_cycle_tcm}/generated/tier/",
+    },
+    "p04": {
+        "tier": "pet",
+        "evt_path": f"{prod_cycle}/generated/tier/",
+        "tcm_path": f"{prod_cycle_tcm}/generated/tier/",
+    },
+    "p06": {
+        "tier": "pet",
+        "evt_path": f"{prod_cycle}/generated/tier/",
+        "tcm_path": f"{prod_cycle_tcm}/generated/tier/",
+    },
+    "p07": {
+        "tier": "pet",
+        "evt_path": f"{prod_cycle}/generated/tier/",
+        "tcm_path": f"{prod_cycle_tcm}/generated/tier/",
+    },
+    "p08": {
+        "tier": "pet",
+        "evt_path": f"{prod_cycle}/generated/tier/",
+        "tcm_path": f"{prod_cycle_tcm}/generated/tier/",
+    },
+}
 runs = metadb.dataprod.config.analysis_runs
 
 
 os.makedirs("outputs/cal/", exist_ok=True)
 output_cache = f"outputs/cal/{out_name.replace('.root', '.parquet')}"
-data_tot=None
-process_evt=False
+data_tot = None
+process_evt = False
 
 # loop over periods, runs and positions
 for p in periods:
@@ -395,8 +371,8 @@ for p in periods:
 
         # extract the json file
         json_file_path = f"{cfg}/{p}/l200-{p}-{r}-cal-T%-keys.json"
-        with open(json_file_path, 'r') as json_file:
-                run_info = json.load(json_file)
+        with open(json_file_path) as json_file:
+            run_info = json.load(json_file)
 
         positions = run_info["info"]["source_positions"].keys()
 
@@ -404,16 +380,19 @@ for p in periods:
 
             # get file lists
             path = f"{prod_cycle_tcm}/generated/tier/tcm/cal/"
-            list_pos =get_file_list(f"{path}",cfg,p,r,pos)
-        
-            list_evt = [f"{prod_cycle}/generated/tier/pet/cal/{p}/{r}/"+tf.replace("tcm","pet").replace("v1.0.0","v1.0.1") for tf in list_pos]
-                    
-            n=out_name.split(".")[-2]
+            list_pos = get_file_list(f"{path}", cfg, p, r, pos)
+
+            list_evt = [
+                f"{prod_cycle}/generated/tier/pet/cal/{p}/{r}/"
+                + tf.replace("tcm", "pet").replace("v1.0.0", "v1.0.1")
+                for tf in list_pos
+            ]
+
+            n = out_name.split(".")[-2]
 
             # output file for parqeut
             output_cache = f"outputs/{n}-{p}-{r}-{pos}.parquet"
             logger.info(f"{p},{r}, {pos}")
-
 
             if os.path.exists(output_cache) and process_evt is False:
                 logger.info("Get from parquet")
@@ -421,11 +400,10 @@ for p in periods:
             else:
                 data = get_data_awkard(
                     cfg=paths_cfg,
-                    file_list_evt = list_evt,
+                    file_list_evt=list_evt,
                     metadb=metadb,
-                    period =p,
-                    run=r
+                    period=p,
+                    run=r,
                 )
                 ak.to_parquet(data, output_cache)
-                data=None
-                
+                data = None

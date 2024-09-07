@@ -1,37 +1,37 @@
 {
-   "number_of_keys": 53,
-   "keys": [
-      "l200-p06-r006-cal-20230724T101342Z",
-      "l200-p06-r006-cal-20230724T121154Z",
-      "l200-p06-r006-cal-20230724T122929Z",
-      "l200-p06-r006-cal-20230724T142741Z"
-   ],
-   "info": {
-      "source_positions": {
-         "pos1": {
-            "keys": [
-               "l200-p06-r006-cal-20230724T101342Z",
-               "l200-p06-r006-cal-20230724T121154Z"
-            ],
-            "positions_in_mm": {
-               "SIS1": 8300,
-               "SIS2": 8890,
-               "SIS3": 8300
-            },
-            "livetime_in_s": 7064
-         },
-         "pos2": {
-            "keys": [
-               "l200-p06-r006-cal-20230724T122929Z",
-               "l200-p06-r006-cal-20230724T142741Z"
-            ],
-            "positions_in_mm": {
-               "SIS1": 8700,
-               "SIS2": 8300,
-               "SIS3": 8890
-            },
-            "livetime_in_s": 7170
-         }
+  "number_of_keys": 53,
+  "keys": [
+    "l200-p06-r006-cal-20230724T101342Z",
+    "l200-p06-r006-cal-20230724T121154Z",
+    "l200-p06-r006-cal-20230724T122929Z",
+    "l200-p06-r006-cal-20230724T142741Z"
+  ],
+  "info": {
+    "source_positions": {
+      "pos1": {
+        "keys": [
+          "l200-p06-r006-cal-20230724T101342Z",
+          "l200-p06-r006-cal-20230724T121154Z"
+        ],
+        "positions_in_mm": {
+          "SIS1": 8300,
+          "SIS2": 8890,
+          "SIS3": 8300
+        },
+        "livetime_in_s": 7064
+      },
+      "pos2": {
+        "keys": [
+          "l200-p06-r006-cal-20230724T122929Z",
+          "l200-p06-r006-cal-20230724T142741Z"
+        ],
+        "positions_in_mm": {
+          "SIS1": 8700,
+          "SIS2": 8300,
+          "SIS3": 8890
+        },
+        "livetime_in_s": 7170
       }
-   }
+    }
+  }
 }

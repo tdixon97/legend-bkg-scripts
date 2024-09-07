@@ -423,7 +423,6 @@ def get_data_awkward(
                     data = d_evt if data is None else ak.concatenate((data, d_evt))
                     n += 1
 
-
                     # for debug
                     if n_max is not None and n > n_max:
                         break
@@ -452,7 +451,9 @@ def get_data_awkward(
                         # we get the most updated metadata
                         start = json.load(
                             open(
-                                os.path.join(evt_path, "../../inputs/dataprod/runinfo.json")
+                                os.path.join(
+                                    evt_path, "../../inputs/dataprod/runinfo.json"
+                                )
                             )
                         )[period][run]["phy"]["start_key"]
                         new_ch = metadb.channelmap(start)

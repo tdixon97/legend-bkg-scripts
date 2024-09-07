@@ -8,9 +8,8 @@ import glob
 import json
 import copy
 import sys
+
 import logging
-import os
-from datetime import datetime
 from pathlib import Path
 import matplotlib.pyplot as plt
 
@@ -20,7 +19,6 @@ import ROOT
 import uproot
 from legendmeta import LegendMetadata
 from lgdo import lh5
-from tqdm import tqdm
 
 # -----------------------------------------------------------
 # LOGGER SETTINGS
@@ -172,7 +170,7 @@ def make_unphysical_rate_plot(run,period,unphysical,geds_mapping,chmax=30,is_for
 def get_data_awkard(
     cfg: dict,
     period=None,
-    run = None,
+    run=None,
     metadb=LegendMetadata(),
 ):
     """
@@ -204,6 +202,7 @@ def get_data_awkard(
     else:
         fl_evt = glob.glob(evt_path + "/" + tier + f"/phy/{period}/{run}/*")
 
+
     for idx,f_evt in enumerate(fl_evt):
         if (idx%50==0):
             logger.debug(f"Reading >>> {f_evt} ({idx} out of {len(fl_evt)})")
@@ -216,6 +215,7 @@ def get_data_awkard(
 
     return data
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="Script to load the data for the LEGEND-200 background model"
@@ -225,6 +225,7 @@ def main():
     )
     parser.add_argument("--p", help="List of periods to inspect")
     parser.add_argument("--r", help="List of runs to inspect",default=None)
+
 
     parser.add_argument("--c", help="Cycle to use")
     parser.add_argument(
@@ -242,36 +243,31 @@ def main():
     prod_cycle = f"/data2/public/prodenv/prod-blind/{cycle}/"
     meta_path  = f"/data2/public/prodenv/prod-blind/{cycle}/inputs/"
     tier="pet"
+
     paths_cfg = {
         "p03": {
             "tier": tier,
             "evt_path": f"{prod_cycle}/generated/tier/",
-
         },
         "p04": {
             "tier": tier,
             "evt_path": f"{prod_cycle}/generated/tier/",
-
         },
         "p06": {
             "tier": tier,
             "evt_path": f"{prod_cycle}/generated/tier/",
-
         },
         "p07": {
             "tier": tier,
             "evt_path": f"{prod_cycle}/generated/tier/",
-
         },
         "p08": {
             "tier": tier,
             "evt_path": f"{prod_cycle}/generated/tier/",
-
         },
         "p09": {
             "tier": tier,
             "evt_path": f"{prod_cycle}/generated/tier/",
-
         },
         "p10": {
             "tier": tier,
@@ -281,8 +277,7 @@ def main():
         "p11": {
             "tier": tier,
             "evt_path": f"{prod_cycle}/generated/tier/",
-
-        }
+        },
     }
     out_name = f"{args.output}"
     periods = args.p
@@ -365,7 +360,7 @@ def main():
                         run_hists[_cut_name][f"{_period}_{run}{name}"] = ROOT.TH1F(
                             hist_name, hist_title, nbins, emin, emax
                         )
-                    
+
 
     sum_hists = {}
     string_diff = np.arange(7)
@@ -414,7 +409,7 @@ def main():
                     rconfig["hist"]["emin"],
                     rconfig["hist"]["emax"],
                 )
-   
+
     logger.info(f"... fill histos")
     globs = {"ak": ak, "np": np}
 
@@ -427,8 +422,8 @@ def main():
 
     energy_name = "energy"
     qcs_flag = "is_good_channel"
-    rawid_name ="rawid"
-    evt_quality_flag="is_bb_like"
+    rawid_name = "rawid"
+    evt_quality_flag = "is_bb_like"
     for period, _run_list in runs.items():
 
         if period not in periods:
@@ -437,6 +432,7 @@ def main():
         for run in _run_list:
             if "phy" not in runs[period][run]:
                 continue
+
             if (period == "p10" and run =="r002"):
                 continue
             data = get_data_awkard(
@@ -446,10 +442,12 @@ def main():
                 metadb = metadb
             )
             if (data is None):
-                continue
-                
 
-            data["geds","on_multiplicity"]=ak.sum(data["geds","quality","is_good_channel"],axis=-1)
+                continue
+
+            data["geds", "on_multiplicity"] = ak.sum(
+                data["geds", "quality", "is_good_channel"], axis=-1
+            )
 
             # and the usual cuts
             data = data[
@@ -486,6 +484,7 @@ def main():
                 data = data[(data.geds["quality"][evt_quality_flag])]
             data["pass_psd"]=ak.all(data.geds.psd.is_bb_like, axis=-1)
 
+
             for _cut_name, _cut_dict in rconfig["cuts"].items():
                 _cut_string = _cut_dict["cut_string"]
 
@@ -497,18 +496,31 @@ def main():
 
                     # loop over channels
                     for _channel_id, _name in sorted(geds_mapping.items()):
-                        
-                        _energy_array = ak.flatten(data[
-                            eval(_cut_string, globs, data)
-                            & (data["period"] == period)
-                            & (data.geds[rawid_name][:, 0] == int(_channel_id[2:]))
-                        ]["geds"][energy_name],axis=-1).to_numpy().astype(np.float64)
+
+                        _energy_array = (
+                            ak.flatten(
+                                data[
+                                    eval(_cut_string, globs, data)
+                                    & (data["period"] == period)
+                                    & (
+                                        data.geds[rawid_name][:, 0]
+                                        == int(_channel_id[2:])
+                                    )
+                                ]["geds"][energy_name],
+                                axis=-1,
+                            )
+                            .to_numpy()
+                            .astype(np.float64)
+                        )
 
                         if len(_energy_array) == 0:
                             continue
                         hists[_cut_name][f"{_channel_id}"].FillN(
-                            len(_energy_array),_energy_array, np.ones(len(_energy_array)),
+                            len(_energy_array),
+                            _energy_array,
+                            np.ones(len(_energy_array)),
                         )
+
 
 
                         # fill also time dependent hists
@@ -528,14 +540,17 @@ def main():
                                         np.ones(len(_energy_array)),
                                     )
 
-                elif (
-                    "is_2d" not in _cut_dict
-                    or _cut_dict["is_2d"] is False
-                ):  
-                    
-                    _summed_energy_array = ak.sum(data[eval(_cut_string, globs, data)]["geds"][
-                        energy_name
-                    ],axis=-1).to_numpy().astype(np.float64)
+
+                elif "is_2d" not in _cut_dict or _cut_dict["is_2d"] is False:
+
+                    _summed_energy_array = (
+                        ak.sum(
+                            data[eval(_cut_string, globs, data)]["geds"][energy_name],
+                            axis=-1,
+                        )
+                        .to_numpy()
+                        .astype(np.float64)
+                    )
 
                     if len(_summed_energy_array) == 0:
                         continue
@@ -557,9 +572,21 @@ def main():
                     
                     # apply the category selection
 
-                    _corrected_energy_1 = _mult_energy_array[_mult_energy_array==ak.min(_mult_energy_array,axis=-1)].to_numpy().astype(np.float64)
-                    _corrected_energy_2 = _mult_energy_array[_mult_energy_array==ak.max(_mult_energy_array,axis=-1)].to_numpy().astype(np.float64)
-                    _summed_energy_array=_corrected_energy_1+_corrected_energy_2
+                    _corrected_energy_1 = (
+                        _mult_energy_array[
+                            _mult_energy_array == ak.min(_mult_energy_array, axis=-1)
+                        ]
+                        .to_numpy()
+                        .astype(np.float64)
+                    )
+                    _corrected_energy_2 = (
+                        _mult_energy_array[
+                            _mult_energy_array == ak.max(_mult_energy_array, axis=-1)
+                        ]
+                        .to_numpy()
+                        .astype(np.float64)
+                    )
+                    _summed_energy_array = _corrected_energy_1 + _corrected_energy_2
 
                     # get the categories
                     for name in names_m2:
@@ -581,19 +608,23 @@ def main():
                                 _corrected_energy_2_tmp = np.array(_corrected_energy_2)[
                                     np.where(categories == cat)[0]
                                 ]
-                                _summed_energy_array_tmp = np.array(_summed_energy_array)[
-                                    np.where(categories == cat)[0]
-                                ]
+                                _summed_energy_array_tmp = np.array(
+                                    _summed_energy_array
+                                )[np.where(categories == cat)[0]]
 
                             elif "sd" in name:
                                 sd = int(name.split("_")[1])
 
                                 ids = np.where(string_diff == sd)[0]
-                                _corrected_energy_1_tmp = np.array(_corrected_energy_1)[ids]
-                                _corrected_energy_2_tmp = np.array(_corrected_energy_2)[ids]
-                                _summed_energy_array_tmp = np.array(_summed_energy_array)[
+                                _corrected_energy_1_tmp = np.array(_corrected_energy_1)[
                                     ids
                                 ]
+                                _corrected_energy_2_tmp = np.array(_corrected_energy_2)[
+                                    ids
+                                ]
+                                _summed_energy_array_tmp = np.array(
+                                    _summed_energy_array
+                                )[ids]
 
                         # all case
                         elif "e1" in name:
@@ -611,7 +642,6 @@ def main():
                             _corrected_energy_2_tmp = np.array(_corrected_energy_2)
                             _summed_energy_array_tmp = np.array(_summed_energy_array)
 
-    
                         if len(_summed_energy_array_tmp) == 0:
                             continue
 
@@ -626,6 +656,7 @@ def main():
                             np.ones(len(_summed_energy_array_tmp)),
                         )
                         
+
 
     for _cut_name in hists:
         hists[_cut_name]["all"] = ROOT.TH1F(

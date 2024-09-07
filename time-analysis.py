@@ -2,9 +2,11 @@
 time-analysis.py
 Authors: Toby Dixon and Sofia Calgaro
 """
+import legendstyles
 
 import argparse
 import copy
+import json
 import logging
 from datetime import datetime
 
@@ -14,13 +16,11 @@ import pandas as pd
 import tol_colors as tc
 import uproot
 from hist import Hist
-from legend_plot_style import LEGENDPlotStyle as lps
 from legendmeta import LegendMetadata
 from matplotlib.backends.backend_pdf import PdfPages
 
 import utils
 
-lps.use("legend")
 vset = tc.tol_cset("vibrant")
 mset = tc.tol_cset("muted")
 plt.rc("axes", prop_cycle=plt.cycler("color", list(vset)))
@@ -32,6 +32,7 @@ stream_handler = logging.StreamHandler()
 stream_handler.setLevel(logging.DEBUG)
 formatter = logging.Formatter("%(asctime)s: %(message)s")
 stream_handler.setFormatter(formatter)
+logger.addHandler(stream_handler)
 
 
 def expo(t, A, B, T):
@@ -46,6 +47,7 @@ style = {
 }
 
 
+plt.style.use(legendstyles.LEGEND)
 # looad the arguments
 parser = argparse.ArgumentParser(
     description="Script to plot the time dependence of counting rates in L200"
@@ -62,10 +64,10 @@ parser.add_argument(
     "-i",
     type=str,
     help="Name of input root file",
-    default="outputs/l200a-vancouver_full-dataset-v0.0.0.root",
+    default="/data1/users/tdixon/legend-bkg-scripts/outputs/l200a_neutrino24_v2.1.0.root",
 )
 parser.add_argument(
-    "--input_p10", "-I", type=str, help="Name of input root file for p10", default=None
+    "--input_p10", "-I", type=str, help="Name of input root file for p10", default="/data1/users/tdixon/legend-bkg-scripts/outputs/l200a_neutrino24_p10_v2.1.0.root"
 )
 parser.add_argument(
     "--energy",
@@ -106,18 +108,21 @@ args = parser.parse_args()
 output = args.output
 input = args.input
 input_p10 = args.input_p10
-subtract = args.subtract
+subtract = bool(args.subtract)
 plot_hist = bool(args.plot_hist)
 spectrum = args.spectrum
 overlay = args.BAT_overlay
 average = args.average
-
 include_p10 = True
 
+logger.info(f"RUnning the analysis with {input} to {output}")
+  
 if input_p10 is None:
     include_p10 = False
 
 energy = args.energy
+logger.info(f"energy range and spectrum {energy} {spectrum}")
+logger.info(f"Including p10? {include_p10}")
 
 energy_list = []
 # just two numbers
@@ -144,14 +149,14 @@ if len(energy_list) > 1 and subtract:
 # ----------------------
 
 
-metadb = LegendMetadata("/data2/public/prodenv/prod-blind/tmp-auto/inputs")
+metadb = LegendMetadata("/data2/public/prodenv/prod-blind/ref-v2.1.0/inputs")
 
 chmap = metadb.channelmap(datetime.now())
 runs = metadb.dataprod.config.analysis_runs
 
 # hardcoded for now
 if include_p10:
-    runs["p10"] = ["r000", "r001", "r002", "r003"]
+    runs["p10"] = ["r000", "r001","r003","r004","r005","r006"]
 
 run_times = utils.get_run_times(metadb, runs, verbose=1)
 
@@ -169,7 +174,7 @@ hist_tot_p10 = None
 # extract the data and start / stop times
 # ----------------------------------------
 
-periods = ["p03", "p04", "p06", "p07", "p08"]
+periods = ["p03", "p04", "p06", "p07", "p08","p09"]
 if include_p10:
     periods.append("p10")
 
@@ -222,7 +227,7 @@ if include_p10:
                         hist_tot_p10 = copy.deepcopy(hists_p10[period][run])
                     else:
                         hist_tot_p10 += hists_p10[period][run]
-
+logger.info(".....build all histograms")
 
 # get counts in each run
 # -------------------------------------------------
@@ -232,7 +237,7 @@ counts_p10 = {}
 
 
 if subtract:
-    pdf = PdfPages("outputs/" + out_name[0:-5] + "_counting_analysis.pdf")
+    pdf = PdfPages("plots/" + out_name[0:-5] + "_counting_analysis.png")
 
 
 # get the counts in each period
@@ -286,27 +291,29 @@ for period in periods:
                         f" {energy_low} to {energy_high} keV {period}-{run}",
                     )
 
-
+logger.info(".....got count rates");
 # and for the total
 if subtract is False:
     c_tmp = utils.integrate_hist(hist_tot, energy_list)
     error = utils.get_error_bar(c_tmp)
     counts_total = (c_tmp, error[0], error[1])
     posterior = error[2]
-    c_tmp = utils.integrate_hist(hist_tot_p10, energy_list)
-    error_p10 = utils.get_error_bar(c_tmp)
-    counts_total_p10 = (c_tmp, error_p10[0], error_p10[1])
-    posterior_p10 = error_p10[2]
+    if include_p10:
+        c_tmp = utils.integrate_hist(hist_tot_p10, energy_list)
+        error_p10 = utils.get_error_bar(c_tmp)
+        counts_total_p10 = (c_tmp, error_p10[0], error_p10[1])
+        posterior_p10 = error_p10[2]
 else:
-    counts_total_p10, posterior_p10 = utils.sideband_counting(
-        hist_tot_p10,
-        energy_low - 15,
-        energy_low,
-        energy_high,
-        energy_high + 15,
-        pdf,
-        f" {energy_low} to {energy_high} keV p10-TOTAL",
-    )
+    if include_p10:
+        counts_total_p10, posterior_p10 = utils.sideband_counting(
+            hist_tot_p10,
+            energy_low - 15,
+            energy_low,
+            energy_high,
+            energy_high + 15,
+            pdf,
+            f" {energy_low} to {energy_high} keV p10-TOTAL",
+        )
     counts_total, posterior = utils.sideband_counting(
         hist_tot,
         energy_low - 15,
@@ -314,7 +321,7 @@ else:
         energy_high,
         energy_high + 15,
         pdf,
-        f" {energy_low} to {energy_high} keV p3-p8-TOTAL",
+        f" {energy_low} to {energy_high} keV neutrino-TOTAL",
     )
 
 
@@ -323,7 +330,6 @@ if subtract:
 
 # fill the histograms and arrays
 # -------------------------------------------------
-
 x = []
 y = []
 ey_low = []
@@ -345,16 +351,16 @@ if include_p10:
 total_exposure = 0
 total_exposure_p10 = 0
 
-
+period_times={}
 for period in periods:
     run_list = runs[period]
+    period_times[period]=[np.inf,0]
     for run in run_list:
         if run not in run_times[period]:
             continue
         tstart, tstop, mass = run_times[period][run]
-
         # fill histo and arrays
-        if period != "p10":
+        if period != "p10" and run in counts[period]:
             histo_mass[(tstart / 60 / 60 / 24 + tstop / 60 / 60 / 24) * 0.5j] = mass
             histo_time[(tstart / 60 / 60 / 24 + tstop / 60 / 60 / 24) * 0.5j] = counts[
                 period
@@ -362,12 +368,17 @@ for period in periods:
 
             norm = (tstop - tstart) / (60 * 60 * 24)
 
-            if norm > 1:
+            if norm > 1 and run in counts[period]:
                 x.append((tstart / 60 / 60 / 24 + tstop / 60 / 60 / 24) * 0.5)
                 y.append(counts[period][run][0] / (norm * mass))
                 ey_low.append(counts[period][run][1] / (norm * mass))
                 ey_high.append(counts[period][run][2] / (norm * mass))
 
+                if (tstop/60/60/24 > period_times[period][1]):
+                    period_times[period][1]=tstop/60/60/24
+                if (tstart/60/60/24 < period_times[period][0]):
+                    period_times[period][0]=tstart/60/60/24
+                    
             total_exposure += (tstop / 60 / 60 / 24 - tstart / 60 / 60 / 24) * mass
 
         # same for p10
@@ -385,8 +396,13 @@ for period in periods:
                 ey_low_p10.append(counts_p10[period][run][1] / (norm * mass))
                 ey_high_p10.append(counts_p10[period][run][2] / (norm * mass))
 
+                if (tstop/60/60/24 > period_times[period][1]):
+                    period_times[period][1]=tstop/60/60/24
+                if (tstart/60/60/24 < period_times[period][0]):
+                    period_times[period][0]=tstart/60/60/24
+
 # save the time-histo (for fitting)
-with uproot.recreate("outputs/" + out_name) as output_file:
+with uproot.recreate("time_outputs/" + out_name) as output_file:
     output_file["counts"] = histo_time
     output_file["mass"] = histo_mass
     if include_p10:
@@ -437,8 +453,9 @@ if include_p10:
 
 # Make plots
 # --------------------------------------------------------
+logger.info(".... make plots")
 
-fig, axes_full = lps.subplots(1, 1, figsize=(4, 3), sharex=True)
+fig, axes_full = plt.subplots(1, 1, figsize=(4, 3), sharex=True)
 
 # set y axis limits
 
@@ -462,39 +479,57 @@ if plot_hist:
         )
 
 else:
-    axes_full.errorbar(
-        x=x,
-        y=y,
-        yerr=[np.abs(ey_low), np.abs(ey_high)],
-        color=vset.red,
-        fmt="o",
-        ecolor=vset.orange,
-        label="With OB",
-    )
+
     if include_p10:
+
+        axes_full.errorbar(
+            x=x,
+            y=y,
+            yerr=[np.abs(ey_low), np.abs(ey_high)],
+            color=vset.red,
+            fmt="o", markersize=1.5, linewidth=0.6, capsize=1,
+            ecolor=vset.orange,
+            label="With OB",
+        )
         axes_full.errorbar(
             x=x_p10,
             y=y_p10,
             yerr=[np.abs(ey_low_p10), np.abs(ey_high_p10)],
             color=vset.blue,
-            fmt="o",
+            fmt="o", markersize=1.5, linewidth=0.6, capsize=1,
             ecolor="grey",
             label="No OB",
         )
+    else:
+         axes_full.errorbar(
+            x=x,
+	    y=y,
+            yerr=[np.abs(ey_low), np.abs(ey_high)],
+	    color=vset.blue,
+            fmt="o", markersize=1.5, linewidth=0.6, capsize=1,
+            ecolor="grey",
+        )
 
+for p in period_times:
+    if p=="p10":
+        axes_full.axvspan(xmin=period_times[p][0],xmax=period_times[p][1],color=vset.blue,alpha=0.1)
+    else:
+        axes_full.axvspan(xmin=period_times[p][0],xmax=period_times[p][1],color=vset.orange,alpha=0.1)
+   
 axes_full.set_xlabel("Time [days]")
 axes_full.set_ylabel("Counts / kg -day")
 if include_p10:
-    axes_full.legend(loc="best")
+    axes_full.legend(loc="upper left", frameon=True)
 axes_full.set_title(f"{e_str} keV")
 
 
 # set x ranges for bands
 end_p8 = x[-1]
-start_p10 = x_p10[0]
-end_p10 = x_p10[-1]
-axes_full.set_xlim(-2, end_p10 + 20)
-middle = (start_p10 + end_p8) / 2
+if include_p10:
+    start_p10 = x_p10[0]
+    end_p10 = x_p10[-1]
+    axes_full.set_xlim(-2, end_p10 + 20)
+    middle = (start_p10 + end_p8) / 2
 max_x = axes_full.get_xlim()[1]
 
 # overlay average band
@@ -539,72 +574,89 @@ if overlay is not None:
     N = expo(t, df_res["glob_mode"][0], df_res["glob_mode"][1], df_res["glob_mode"][2])
 
     plt.plot(t, N, label="Global mode")
-    plt.legend(loc="best")
+    plt.legend(loc="upper left", frameon=True)
 
-plt.savefig("outputs/" + out_name[0:-5] + ".pdf")
+legendstyles.legend_watermark(axes_full, logo_suffix="-200", location="outer left")
+legendstyles.add_preliminary(axes_full, color="red")
+plt.savefig("plots/" + out_name[0:-5] + ".png")
 
 
 # make some posterior plots / extract some numbers
 # ------------------------------------------------
 
-counts_samples = utils.sample_hist(posterior, N=int(1e6))
-counts_p10_samples = utils.sample_hist(posterior_p10, N=int(1e6))
+counts_samples = utils.sample_hist(posterior, n=int(1e6))
+if include_p10:
+    counts_p10_samples = utils.sample_hist(posterior_p10, n=int(1e6))
 
 rates = counts_samples / total_exposure
-rates_p10 = counts_p10_samples / total_exposure_p10
-
-div = rates_p10 / rates
+if include_p10:
+    rates_p10 = counts_p10_samples / total_exposure_p10
+    div = rates_p10 / rates
 
 histo_div = Hist.new.Reg(2000, 0, 1.5).Double()
-histo = Hist.new.Reg(2000, 0, max(max(rates), max(rates_p10))).Double()
-histo_p10 = Hist.new.Reg(2000, 0, max(max(rates), max(rates_p10))).Double()
+if include_p10:
+    histo = Hist.new.Reg(2000, 0, max(max(rates), max(rates_p10))).Double()
+else:
+    histo = Hist.new.Reg(2000, 0, max(rates)).Double()
+
+if include_p10:
+    histo_p10 = Hist.new.Reg(2000, 0, max(max(rates), max(rates_p10))).Double()
 
 histo.fill(rates)
-histo_p10.fill(rates_p10)
-histo_div.fill(div)
-fig, axes_full = lps.subplots(1, 1, figsize=(4, 3), sharex=True)
+if include_p10:
+    histo_p10.fill(rates_p10)
+    histo_div.fill(div)
+    
+fig, axes_full = plt.subplots(1, 1, figsize=(4, 3), sharex=True)
 
 histo.plot(
-    ax=axes_full, **style, histtype="fill", alpha=0.4, color=vset.blue, label="With OB"
+    ax=axes_full, **style, histtype="fill", alpha=0.4, color=vset.orange, label="With OB"
 )
-histo_p10.plot(
-    ax=axes_full, **style, histtype="fill", alpha=0.4, color=vset.orange, label="No OB"
-)
+if include_p10:
+    histo_p10.plot(
+        ax=axes_full, **style, histtype="fill", alpha=0.4, color=vset.blue, label="No OB"
+    )
 
 axes_full.set_xlabel("counts/kg/day")
 axes_full.set_ylabel("Prob [arb]")
-axes_full.legend(loc="best")
+axes_full.legend(loc="upper left", frameon=True)
 axes_full.set_title(f"{e_str} keV")
+legendstyles.legend_watermark(axes_full, logo_suffix="-200", location="outer left")
+legendstyles.add_preliminary(axes_full, color="red")
+plt.savefig("plots/" + out_name[0:-5] + "_posterior.png")
 
-plt.savefig("outputs/" + out_name[0:-5] + "_posterior.pdf")
-
-fig, axes_full = lps.subplots(1, 1, figsize=(4, 3), sharex=True)
-
-histo_div.plot(ax=axes_full, **style, color=vset.blue, histtype="fill", alpha=0.4)
-
-axes_full.set_xlabel("rate (p10)/rate (p3-p8)")
-
-plt.savefig("outputs/" + out_name[0:-5] + "_ratio_posterior.pdf")
+if include_p10:
+    fig, axes_full = plt.subplots(1, 1, figsize=(4, 3), sharex=True)
+    histo_div.plot(ax=axes_full, **style, color=vset.blue, histtype="fill", alpha=0.4)
+    axes_full.set_xlabel("rate (p10)/rate (neutrino)")
+    legendstyles.legend_watermark(axes_full, logo_suffix="-200", location="outer left")
+    legendstyles.add_preliminary(axes_full, color="red")
+    plt.savefig("plots/" + out_name[0:-5] + "_ratio_posterior.png")
 
 # now the summary stats
 w, x = histo.to_numpy()
-w_p10, x_p10 = histo_p10.to_numpy()
+if include_p10:
+    w_p10, x_p10 = histo_p10.to_numpy()
 w_div, x_div = histo_div.to_numpy()
 
 best_fit = x[np.argmax(w)]
-best_fit_p10 = x_p10[np.argmax(w_p10)]
+if include_p10:
+    best_fit_p10 = x_p10[np.argmax(w_p10)]
 best_div = x_div[np.argmax(w_div)]
 
 errors = utils.get_smallest_ci(best_fit, x, w)
-errors_p10 = utils.get_smallest_ci(best_fit_p10, x_p10, w_p10)
+if include_p10:
+    errors_p10 = utils.get_smallest_ci(best_fit_p10, x_p10, w_p10)
 errors_div = utils.get_smallest_ci(best_div, x_div, w_div)
 
 logger.info(
     f"For p3-8 rate  = {best_fit:.3g} + {errors[1]:.2g} - {errors[0]:.2g} cts/kg/yr"
 )
-logger.info(
-    f"For p10 rate   = {best_fit_p10:.3g} + {errors_p10[1]:.2g} - {errors_p10[0]:.2g} cts/kg/day"
-)
-logger.info(
-    f"p10/p3-8       = {best_div:.3g} + {errors_div[1]:.2g} - {errors_div[0]:.2g}"
-)
+if include_p10:
+    logger.info(
+        f"For p10 rate   = {best_fit_p10:.3g} + {errors_p10[1]:.2g} - {errors_p10[0]:.2g} cts/kg/day"
+    )
+    logger.info(
+        f"p10/p3-8       = {best_div:.3g} + {errors_div[1]:.2g} - {errors_div[0]:.2g}"
+    )
+plt.show()
