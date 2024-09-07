@@ -9,14 +9,14 @@
 	},
 	"cuts": {
 		"hit": {
-			"cut_string": "True",
-			"description": "",
-			"is_sum": true
-		},
-		"raw": {
-			"cut_string": "True",
+			"cut_string": "(mul > 0 )",
 			"description": "",
 			"is_sum": false
+		},
+		"raw": {
+			"cut_string": "(mul > 0)",
+			"description": "",
+			"is_sum": true
 		},
 		"mul_surv": {
 			"cut_string": "(mul == 1) ",
