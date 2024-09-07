@@ -10,7 +10,7 @@ import logging
 import os
 from datetime import datetime
 from pathlib import Path
-
+import collections
 import awkward as ak
 import numpy as np
 import ROOT
@@ -18,7 +18,9 @@ import uproot
 from legendmeta import LegendMetadata
 from lgdo import lh5
 from tqdm import tqdm
-
+import lgdo
+import matplotlib.pyplot as plt
+print(lgdo.__version__)
 # -----------------------------------------------------------
 # LOGGER SETTINGS
 logger = logging.getLogger(__name__)
@@ -306,7 +308,7 @@ def get_data_awkward(
                         open(
                             os.path.join(evt_path, "../../inputs/dataprod/runinfo.json")
                         )
-                    )[period][run]["phy"]["start_key"]
+                    )[period]["r000"]["cal"]["start_key"]
                     ch = metadb.channelmap(start)
 
                 # loop
@@ -662,6 +664,49 @@ def apply_new_usability(
 
     return data
 
+def make_unphysical_rate_plot(run,period,unphysical,geds_mapping,chmax=30,is_forced=False,norm=None):
+
+    # get total number of events
+    n=0
+    chans=[]
+    events=[]
+    counter=0
+    unphysical=dict(unphysical)
+    n_chans= len(list(geds_mapping.keys()))
+    for key, item in sorted(unphysical.items(), key=lambda item: item[1], reverse=True):        
+        n+=item
+
+        if (counter<chmax):
+            chans.append(geds_mapping[f"ch{key}"])
+            if (norm is not None):
+                events.append(100*item/norm)
+            else:
+                events.append(item)
+        counter+=1
+
+    logger.info(f"In total we have {n} unphysical events")
+    fig,ax=plt.subplots(figsize=(8,4))
+    ax.bar(chans,events)
+    if (norm is None):
+        ax.set_ylabel("Number of unphysical events")
+    else:
+        ax.set_ylabel("Fraction of unphysical hits [%]")
+    plt.xticks(rotation=90, fontsize=8) 
+    if (norm is None):
+        plt.axhline(y=n/n_chans,label="Average",linestyle="--",color="red")
+    plt.legend()
+    if (norm is None):
+        plt.title(f"Number of unphysical hits for {period} - {run}")
+    else:
+        plt.title(f"Fraction of unphysical hits for {period} - {run}")
+    plt.tight_layout()
+    if (is_forced and norm is None):
+
+        plt.savefig(f"plots/unphysical_forced_trigger_{period}_{run}.pdf")
+    elif (norm is not None):
+        plt.savefig(f"plots/unphysical_forced_trigger_norm_{period}_{run}.pdf")
+    else:
+        plt.savefig(f"plots/unphysical_{period}_{run}.pdf")
 
 def print_events(data, qc):
     """Print of the events"""
@@ -702,6 +747,8 @@ def main():
         "--output", help="Name of output root file, eg l200a-p10-r000-dataset-tmp-auto"
     )
     parser.add_argument("--p", help="List of periods to inspect")
+    parser.add_argument("--r", help="List of runs to inspect")
+
     parser.add_argument(
         "--proc",
         help="Boolean flag: True if you want to load from the pet/evt tier; if False and the parquet already exists, then we directly load data from this",
@@ -710,6 +757,11 @@ def main():
         "--qc",
         default="old",
         help="Set to 'new' if you want to apply new cuts (post Vancouver CM), otherwise default value is set to 'old' cuts",
+    )
+    parser.add_argument(
+        "--use_qc",
+        default=1,
+        help="Set to 0 if you want to not use QCs",
     )
     parser.add_argument(
         "--target",
@@ -733,17 +785,17 @@ def main():
     config_path = (
         "/global/cfs/cdirs/m2676/users/calgaro/legend-bkg-scripts/pdf-l200a/build-pdf-config.json"
         if cluster == "nersc"
-        else "/data1/users/tdixon/build_pdf/legend-simflow-config/tier/pdf/l200a/build-pdf-config.json"
+        else "/data1/users/tdixon/build_pdf/legend-simflow-config/tier/pdf/l200a/build-pdf-config-simple.json"
     )
     xtc_folder = (
         "/global/cfs/cdirs/m2676/users/calgaro/legend-bkg-scripts/cross_talk"
         if cluster == "nersc"
-        else "/global/cfs/cdirs/m2676/users/calgaro/legend-bkg-scripts/cross_talk"
+        else "/data1/users/tdixon/legend-bkg-scripts/cross_talk"
     )
     bad_keys_path = (
         "/global/cfs/cdirs/m2676/users/calgaro/legend-bkg-scripts/updated_metadata/ignore_keys.keylist"
         if cluster == "nersc"
-        else "/global/cfs/cdirs/m2676/users/calgaro/legend-bkg-scripts/updated_metadata/ignore_keys.keylist"
+        else "/data1/users/tdixon/legend-bkg-scripts/cfg/ignore_keys.keylist"
     )
     target_key = args.target
     prodenv_version = args.version
@@ -756,6 +808,9 @@ def main():
 
     out_name = f"{args.output}.root"
     periods = args.p
+    runs_list=[args.r]
+    use_qc =bool(int(args.use_qc))
+    logger.info(f"use qc {use_qc}")
     process_evt = False if args.proc == "False" else True
 
     paths_cfg = {
@@ -787,6 +842,10 @@ def main():
             "tier": "evt",
             "evt_path": os.path.join(global_path, "tmp-auto", "generated/tier/"),
         },
+         "p11": {
+            "tier": "evt",
+            "evt_path": os.path.join(global_path, "tmp-auto", "generated/tier/"),
+        },
     }
 
     cross_talk_matrixs = {
@@ -797,6 +856,8 @@ def main():
         "p08": os.path.join(xtc_folder, "l200-p06-r000-x-talk-matrix.json"),
         "p09": os.path.join(xtc_folder, "l200-p06-r000-x-talk-matrix.json"),
         "p10": os.path.join(xtc_folder, "l200-p06-r000-x-talk-matrix.json"),
+        "p11": os.path.join(xtc_folder, "l200-p06-r000-x-talk-matrix.json"),
+
     }
 
     with Path(config_path).open() as f:
@@ -810,7 +871,7 @@ def main():
     logger.info("... get the metadata information / mapping")
     metadb = (
         LegendMetadata(f"{global_path}/tmp-auto/inputs")
-        if "p10" in periods
+        if "p10" in periods or "p11" in periods
         else LegendMetadata(f"{global_path}/{prodenv_version}/inputs")
     )
     chmap = metadb.channelmap(rconfig["timestamp"])
@@ -836,7 +897,7 @@ def main():
     # analysis runs
     runs = metadb.dataprod.config.analysis_runs
     runs["p10"] = ["r000", "r001", "r003", "r004", "r005", "r006"]  # no r002
-    logger.info("The following data are available:\n", runs, "\n")
+    runs["p11"]=runs_list
 
     os.makedirs("outputs", exist_ok=True)
     output_cache = f"outputs/{out_name.replace('.root', '.parquet')}"
@@ -871,13 +932,32 @@ def main():
 
     # ---------------------------------------------------------------------
     # apply cuts
-    data = data[
-        (~data.trigger.is_forced)  # no forced triggers
-        & (~data.coincident.puls)  # no pulser eventsdata
-        & (data.geds.multiplicity > 0)  # no purely lar triggered events
-        & (ak.all(data.geds[qcs_flag], axis=-1))
-    ]
+    data = data[(~data.coincident.puls)]
 
+    ## make the unphysical rates plot
+
+    import collections
+    # first for real triggers
+    (~data.trigger.is_forced)  # no forced triggers
+    unphysical = collections.Counter(ak.flatten(data[~data.trigger.is_forced]["geds","unphysical_hit_rawid"]))
+    make_unphysical_rate_plot(args.r,args.p,unphysical,geds_mapping,is_forced=False)
+    
+    unphysical = collections.Counter(ak.flatten(data[data.trigger.is_forced]["geds","unphysical_hit_rawid"]))
+    n_forced = ak.num(data[data.trigger.is_forced],axis=0)
+    n_forced_pass =  ak.num(data[ak.all(data.geds[qcs_flag],axis=-1) & (data.trigger.is_forced)],axis=0)
+    logger.info(f"n forced {n_forced} and n forced pass {n_forced_pass}")
+    p = n_forced_pass/n_forced
+    err = np.sqrt(p*(1-p)/n_forced)
+    logger.info(f"Forced trigger survival = {100*n_forced_pass/n_forced} +/- {100*err}")
+    make_unphysical_rate_plot(args.r,args.p,unphysical,geds_mapping,is_forced=True,norm=n_forced)
+
+    # remove forced triggers
+    data=data[(~data.trigger.is_forced) & (data.geds.multiplicity > 0)]
+
+    if (use_qc):
+        data= data[ak.all(data.geds[qcs_flag], axis=-1)]
+
+    
     # muon flag: no evt flag in tmp-auto, loads the usual MUON01
     if prodenv_version == "tmp-auto":
         data = data[(~data.coincident.muon)]
@@ -994,7 +1074,7 @@ def main():
 
     conversions = {
         "mul ": "geds.multiplicity ",
-        "mul_is_good ": "geds.on_multiplicity ",
+        "mul_is_good ": "geds.multiplicity ",
         "and": "&",
         "npe_tot": "spms.energy_sum",
     }
@@ -1018,11 +1098,11 @@ def main():
             if _cut_dict["is_sum"] is False:
                 # loop over channels
                 for _channel_id, _name in sorted(geds_mapping.items()):
-                    _energy_array = data[
+                    _energy_array = ak.flatten(data[
                         eval(_cut_string, globs, data)
                         & (data["period"] == _period)
                         & (data.geds.hit_rawid[:, 0] == int(_channel_id[2:]))
-                    ]["geds"]["energy"].to_numpy()
+                    ]["geds"]["energy"],axis=-1).to_numpy()
 
                     if len(_energy_array) == 0:
                         continue
@@ -1030,18 +1110,19 @@ def main():
                         len(_energy_array), _energy_array, np.ones(len(_energy_array))
                     )
 
-                _energy_array = data[
+                _energy_array = ak.flatten(data[
                     eval(_cut_string, globs, data) & (data["period"] == _period)
-                ]["geds"]["energy"].to_numpy()
-                _run_array = data[
+                ]["geds"]["energy"],axis=-1).to_numpy()
+                _run_array = ak.flatten(data[
                     eval(_cut_string, globs, data) & (data["period"] == _period)
-                ]["run"].to_numpy()
+                ]["run"],axis=-1).to_numpy()
 
                 # fill also time dependent hists
 
                 for run in _run_list:
-                    _energy_array_tmp = np.array(_energy_array)[_run_array == run]
-
+                    _energy_array_tmp = ak.flatten(data[
+                    eval(_cut_string, globs, data) & (data["period"] == _period) & (data["run"]==run)
+                        ]["geds"]["energy"],axis=-1).to_numpy()
                     if len(_energy_array_tmp) == 0:
                         continue
                     run_hists[_cut_name][f"{_period}_{run}"].FillN(
@@ -1056,7 +1137,7 @@ def main():
             ):
                 _summed_energy_array = data[eval(_cut_string, globs, data)]["geds"][
                     "energy_sum"
-                ].to_numpy()
+                ].to_numpy().astype(np.float64)
 
                 if len(_summed_energy_array) == 0:
                     continue
